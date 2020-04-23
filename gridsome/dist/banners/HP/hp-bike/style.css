@@ -1,0 +1,214 @@
+body { 
+	margin:0px 0px; padding:0px;
+}
+* { box-sizing: border-box}
+
+#container{
+	background-color:#D7D9E5;
+	position:absolute;
+	overflow:hidden;
+/*		background-image:url(../img/guide.png);*/
+}
+
+#button {
+	position:absolute;
+	overflow:hidden;
+}
+
+.sprite {
+	position:absolute;
+	background-repeat:no-repeat;
+}
+
+.show {
+	position:absolute;
+	background-repeat:no-repeat;
+}
+
+.time {
+	position:absolute;
+	background-repeat:no-repeat;
+}
+
+#bg {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 380px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1);
+/*	background-image:url(../img/bg.jpg);*/
+}
+
+#prod1 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 300px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/prod1.png);
+    background-size: 300px 250px;
+}
+
+#prod2 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 300px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/prod2.png);
+    background-size: 300px 250px;
+}
+
+#txfrm11 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 300px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/txt-f1.png);
+}
+
+#txfrm22 {
+		z-index: 8;
+		right: 0px;
+		bottom: 0px;
+		width: 300px;
+		height: 250px;
+		opacity: 1;
+		transform: scale(1);
+		background-image:url(../img/txt-f2.png);
+	}
+
+#txfrm33 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 300px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/txfrm3_1.png);
+}
+
+
+#txfrm44 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 300px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/txfrm4_1.png);
+}
+
+
+#frm1 {
+	z-index: 8;
+	right: 0px;
+	top: 0px;
+	width: 300px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/bike-before.png);
+	background-size: 250px;
+
+	background-position: top right -57px;
+
+
+}
+
+#frm2 {
+	z-index: 8;
+	right: 0px;
+	top: 0px;
+	width: 300px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/bike-after.png);
+	background-size: 235px;
+	background-position: top 0px right -49px;
+	
+}
+
+#btnon {
+	z-index: 9;
+	right: 166px;
+	bottom: 15px;
+	width: 113px;
+	height: 26px;
+    opacity: 1;
+    transform: scale(1);
+	cursor: pointer;
+/*	background-image:url(../img/on_btnSM.png);*/
+}
+
+#btnoff {
+	z-index: 8;
+	right: 166px;
+	bottom: 15px;
+	width: 113px;
+	height: 26px;
+    transform: scale(1);
+	background-image:url(../img/off_btnSM.png);
+}
+
+#cta {
+    z-index: 11;
+	border: 1px solid #c6c6c6;
+	right: 0px;
+	bottom: 0px;
+	width: 300px;
+	height: 250px;  
+    opacity: 1;
+	cursor: pointer;
+}
+
+
+#logo {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 300px;
+	height: 250px;
+    opacity: 1;
+    transform: scale(1); 
+	background-image:url(../img/logo.png);
+}
+
+#LEARNBUTTON {
+	right: 0px;
+	bottom: 0px;
+	opacity: 1;
+}
+
+#LEARNBUTTON #LEARNMORE {
+	z-index: 11;
+	position:absolute;
+	right: 166px;
+	bottom: 15px;
+	width: 113px;
+	height: 26px;
+	background-image:url(../img/off_btnSM.png);
+
+}
+
+#LEARNBUTTON #LEARNMORE:hover {
+	z-index: 11;
+	right: 166px;
+	bottom: 15px;
+	width: 113px;
+	height: 26px;
+	background-image:url(../img/on_btnSM.png);
+	cursor: pointer;
+}

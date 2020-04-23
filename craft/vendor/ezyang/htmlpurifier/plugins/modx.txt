@@ -35,7 +35,7 @@ $e = &$modx->Event;
 if ($e->name == 'OnBeforeDocFormSave') {
     global $content;
 
-    include_once '../assets/plugins/htmlpurifier/library/HTMLPurifier.auto.php';
+    include_once '/assets/plugins/htmlpurifier/library/HTMLPurifier.auto.php';
     $purifier = new HTMLPurifier();
 
     static $magic_quotes = null;

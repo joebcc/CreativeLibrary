@@ -13,13 +13,15 @@ return [
                     $asset = $entry->asset->one();
 
                     return [
-                        'title' => $entry->title,
-                        'url' => $entry->url,
-                        'slug' => $entry->slug,
                         'id' => $entry->id,
-                        'client' => (string)$entry->client,
-                        'jsonUrl' => UrlHelper::url("creative/{$entry->id}.json"),
+                        'slug' => $entry->slug,
+                        'title' => $entry->title,
                         'asset' => $asset ? $asset : null,
+                        'campaign' => $entry->campaign,
+                        'client' => (string)$entry->client,
+                        'date' => $entry->date,
+                        'url' => $entry->url,
+                        'jsonUrl' => UrlHelper::url("creative/{$entry->id}.json"),
                     ];
                 },
             ];
