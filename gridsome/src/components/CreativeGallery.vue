@@ -1,7 +1,7 @@
 <template>
   <div class="creativeGallery">
     <div class="filters flex justify-between text-xs p-4">
-      {{filters}}
+      <!-- {{filters}} -->
       <div v-for="(filter, name) in filters" :key="name" :id="name">
         {{name}} : 
         <form class="text-base">

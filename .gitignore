@@ -3,3 +3,4 @@
 /vendor
 .DS_Store
 /gridsome/node_modules
+yarn.lock
