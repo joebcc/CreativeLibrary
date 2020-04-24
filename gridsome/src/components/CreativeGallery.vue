@@ -1,34 +1,74 @@
 <template>
   <div class="creativeGallery">
-    <div class="filters flex justify-between text-xs p-4">
+    <!-- <div class="flex justify-between p-4 pt-8">
+      <img src="../assets/april6-logo.svg" width="300" />
+      <div class="search grid items-end">
+        <input type="text" v-model="search" class="border w-full p-2">
+      </div> 
+    </div> -->
+    <div class="filters grid grid-cols-5 text-xs p-4 gap-2 text-center justify-center items-center">
+      <img src="../assets/april6logo.svg" width="300" class="col-span-2" />
       <!-- {{filters}} -->
-      <div v-for="(filter, name) in filters" :key="name" :id="name">
-        {{name}} : 
+      <div 
+        v-for="(filter, name) in filters" 
+        :key="name" 
+        :id="name" 
+        class="filter bg-gray-200 rounded-lg p-4" 
+      >
         <form class="text-base">
-          <label><input :name="name+'any'" value="all" checked='true' type="checkbox" @click="allToggle(name)">Any</label>
-          <div v-if="filter.selected !== 'all'">
-            <label
-              v-for="(option, oi) in filter.list"
-              :key="name + oi"
+          {{name}} : 
+          <label :class="filter.selected == 'all' ? 'selected' : ''">
+            <input 
+              :name="name+'any'" 
+              value="all" 
+              checked='true' 
+              type="checkbox" 
+              @click="allToggle(name)"
             >
-              <input type="checkbox" :name="name + oi" @click="optionToggle(option, filter.selected)">
-              {{option}}
-            </label>
-          </div>
+            Any
+          </label>
+          <transition name="fade" tag="div">
+            <div v-if="filter.selected !== 'all'">
+              <label
+                v-for="(option, oi) in filter.list"
+                :key="name + oi"
+                :class="filter.selected.includes(option) ? 'selected' : ''"
+              >
+                <input type="checkbox" :name="name + oi" @click="optionToggle(option, filter.selected)">
+                {{option}}
+              </label>
+            </div>
+          </transition>
         </form>
       </div>
     </div>
-    <div class="flex flex-vertical flex-wrap p-4">
+    <transition-group name="fade" tag="div" class="flex flex-vertical flex-wrap p-4">
       <div 
         v-for="creative in matchingCreatives" 
         :key="creative.slug"
-        class="p-4 rounded mx-auto text-center mt-8 bg-gray-200"
+        class="mx-auto text-center mt-8"
       >
         <Banner :creative="creative"/>
       </div>
-    </div>
+    </transition-group>
   </div>
 </template>
+
+<style scoped>
+.search {
+  max-width: 600px;
+  width: 100%;
+}
+.fade-enter-active, .fade-leave-active {
+  transition: all .3s;
+  max-height: 1000px
+}
+.fade-enter, .fade-leave-to /* .list-leave-active below version 2.1.8 */ {
+  opacity: 0;
+  transform: translateY(30px);
+  max-height: 0px
+}
+</style>
 
 <script>
 export default {
@@ -41,6 +81,7 @@ export default {
   },
   data() { 
     return {
+      search: '',
       filters: {
         client: {
           list:[],
@@ -50,10 +91,10 @@ export default {
           list:[],
           selected: 'all',
         },
-        assetType: {
-          list:[],
-          selected: 'all',
-        },
+        // assetType: {
+        //   list:[],
+        //   selected: 'all',
+        // },
         size: {
           list:[],
           selected: 'all',
@@ -79,38 +120,31 @@ export default {
             || creativeValue === undefined 
             || creativeValue === null
           ) { 
-          console.log('failed empty fasfd', searchValue, creativeValue)
+            console.log('failed empty', searchValue, creativeValue)
             check = false; 
             return
           }
-          // console.log('passedasdfasdf', searchValue, creativeValue)
 
           //! searchValue - Array
           //! creativeValue - Array || String
+          //? when there's only 1 search query check creative vs search directly
           if (searchValue.length === 1){
             if (creativeValue.includes(searchValue)) { 
-              console.log('passing test', searchValue, creativeValue)
               return
             } else {
               check = false;
               return
             }
+          //? otherwise cross reference the arrays with a filter
           } else {
-          // } else if (Array.isArray(creativeValue)) {
-            // [hp, rockwell] - 'hp'
-            console.log(searchValue.filter(val => creativeValue.includes(val)).length > 0, 'test 2')
-            if (searchValue.filter(val => creativeValue.includes(val)).length > 0) {
-              console.log('passing second test')
-              return
-            } 
-
+            if (searchValue.filter(val => creativeValue.includes(val)).length > 0) { return } // return as true
             check = false;
             return
             
           } 
-          console.log('endo', searchValue, creativeValue, check)
+          // console.log('endo', searchValue, creativeValue, check)
         })
-        console.log('endtot', check)
+        // console.log('endtot', check)
 
         // if (check === true) {console.log('passed', creative.slug) } 
         // else { console.log('failed', creative.slug)  }
@@ -125,7 +159,7 @@ export default {
     this.$props.creatives.forEach(function(creative){
       filterFinder('client', creative.client)
       filterFinder('campaign', creative.campaign)
-      filterFinder('assetType', creative.assetType)
+      // filterFinder('assetType', creative.assetType)
       filterFinder('size', creative.size)
     })
   },

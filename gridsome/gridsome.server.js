@@ -37,8 +37,26 @@ module.exports = function (api) {
         //? Ensure we have only 1 .html file .........................................
         } else { 
           creativeUrl = `/banners/${item.client}/${item.slug}/`;
-          zipEntries.forEach(zipEntry => 
-            zip.extractEntryTo(zipEntry.entryName, `static/${creativeUrl}`, /*maintainEntryPath*/false, /*overwrite*/true)
+          zipEntries.forEach(function(zipEntry) {
+            const entryName = zipEntry.entryName;
+            if (entryName.includes('__MACOSX')) {
+              //? skip unneeded files
+              return;
+            } else if (entryName.includes('/')) {
+              //? for dealing with internal folders - stripping the extra added by the unzipping
+              const regex = /\/(.*)\//;
+              const internalpath = entryName.match(regex);
+              var internalURL = creativeUrl;
+              if (internalpath && internalpath[1]) {
+                internalURL += internalpath[1];
+              }
+              zip.extractEntryTo(entryName, `static/${internalURL}`, /*maintainEntryPath*/false, /*overwrite*/true)
+            } else {
+              zip.extractEntryTo(entryName, `static/${creativeUrl}`, /*maintainEntryPath*/false, /*overwrite*/true)
+            }
+
+
+          } 
           );
           
           //? Check HTML file for ad.size label and save the values if present
@@ -59,7 +77,7 @@ module.exports = function (api) {
 
       item.creativeUrl = creativeUrl;
       createPage({
-        path: `/creative/${item.slug}`,
+        path: `/${item.slug}`,
         component: './src/templates/CreativeSingle.vue',
         context: {
           ...item,
@@ -72,7 +90,7 @@ module.exports = function (api) {
     })
 
     createPage({
-      path: `/creative`,
+      path: `/`,
       component: './src/templates/CreativeArchive.vue',
       context: {
         creative: creative,

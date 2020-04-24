@@ -1,20 +1,18 @@
 <template>
-  <div>
-    <a :href="creative.creativeUrl" class="text-lg font-bold">
-      {{ creative.title }}
-    </a>
-    <iframe :src="'..' + creative.creativeUrl" :width="creative.width" :height="creative.height" class="my-2">
+  <div class="banner-container">
+    <iframe :src="'..' + creative.creativeUrl" :width="creative.width" :height="creative.height">
     </iframe>
-    <div class="flex justify-between text-xs">
+    <div class="text-xs banner-info">
+      <a :href="creative.creativeUrl" class="text-base font-bold mt-2 block">
+        {{ creative.title }}
+      </a>
       <div v-if="creative.client">
         Client - <span class="client text-base">{{creative.client}}</span>
       </div>
       <div v-if="creative.campaign">
         Campaign - <span class="campaign text-base">{{creative.campaign}}</span>
       </div>
-    </div>
-    <div class="flex justify-between text-xs">
-      <div v-if="creative.height || creative.width">
+      <div v-if="creative.height || creative.width" class="mb-2">
         Size - <span class="size text-base">{{creative.width ? creative.width : '?'}} x {{creative.height ? creative.height : '?'}}</span>
       </div>
       <!-- <div v-if="creative.date">
@@ -23,6 +21,26 @@
     </div>
   </div>
 </template>
+
+<style scoped>
+.banner-container {
+  background: var(--lightblue);
+}
+  .banner-info{
+    overflow: hidden;
+    display: block;
+    max-height: 0;
+    opacity: 0;
+    transition: .5s ease all;
+  }
+  .banner-container:hover .banner-info {
+    max-height: 1000px;
+    opacity: 1;
+  }
+  iframe {
+    max-width: 100%;
+  }
+</style>
 
 <script>
 export default {
