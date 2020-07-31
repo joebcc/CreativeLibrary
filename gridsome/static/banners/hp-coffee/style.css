@@ -1,0 +1,210 @@
+body { 
+	margin:0px 0px; padding:0px;
+}
+* { box-sizing: border-box}
+
+#container{
+	background-color:#D7D9E5;
+	position:absolute;
+	overflow:hidden;
+/*		background-image:url(../img/guide.png);*/
+}
+
+#button {
+	position:absolute;
+	overflow:hidden;
+}
+
+.sprite {
+	position:absolute;
+	background-repeat:no-repeat;
+}
+
+.show {
+	position:absolute;
+	background-repeat:no-repeat;
+}
+
+.time {
+	position:absolute;
+	background-repeat:no-repeat;
+}
+
+#bg {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);
+/*	background-image:url(../img/bg.jpg);*/
+}
+
+#prod1 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/prod1.png);
+    background-size: 728px 90px;
+}
+
+#prod2 {
+	z-index: 8;
+	right: 0px;
+	bottom: -1px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/prod2.png);
+    background-size: 728px 90px;
+}
+
+#txfrm11 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/txfrm1_1.png);
+}
+
+#txfrm22 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 728px;
+	height: 90px;
+	opacity: 1;
+	transform: scale(1);
+	background-image:url(../img/txfrm2_1.png);
+	}
+
+#txfrm33 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/txfrm3_1.png);
+}
+
+
+#txfrm44 {
+	z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/txfrm4_1.png);
+}
+
+
+#frm1 {
+	z-index: 8;
+	right: 0px;
+	top: 0px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);
+    /* transform-origin: 50% 85%; */
+	background-image:url(../img/coffee-bad.png);
+	background-position: 84% 50%;
+	background-size: auto 80px;
+}
+
+#frm2 {
+	z-index: 8;
+	right: 0px;
+	top: 0px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);
+	background-image:url(../img/coffee-good.png);
+	background-position: 84% 50%;
+	background-size: auto 80px;
+}
+
+
+
+#btnon {
+	z-index: 9;
+	right: 42px;
+	bottom: 33px;
+	width: 100px;
+	height: 25px;
+	cursor: pointer;
+/*	background-image:url(../img/on_btnSM.png);*/
+}
+
+#btnoff {
+	z-index: 8;
+	right: 42px;
+	bottom: 33px;
+	width: 100px;
+	height: 25px;
+	background-image:url(../img/on_btnSM.png);
+}
+
+#cta {
+    z-index: 11;
+	border: 1px solid #c6c6c6;
+	right: 0px;
+	bottom: 0px;
+	width: 728px;
+	height: 90px;  
+    opacity: 1;
+	cursor: pointer;
+}
+
+
+#logo {
+    z-index: 8;
+	right: 0px;
+	bottom: 0px;
+	width: 728px;
+	height: 90px;
+    opacity: 1;
+    transform: scale(1);    
+	background-image:url(../img/logo.png);
+}
+
+#LEARNBUTTON {
+	right: 0px;
+	bottom: 0px;
+	opacity: 1;
+}
+
+#LEARNBUTTON #LEARNMORE {
+	z-index: 11;
+	position:absolute;
+	right: 42px;
+	bottom: 33px;
+	width: 100px;
+	height: 25px;
+	background-image:url(../img/on_btnSM.png);
+
+}
+
+#LEARNBUTTON #LEARNMORE:hover {
+	z-index: 11;
+	right: 42px;
+	bottom: 33px;
+	width: 100px;
+	height: 25px;
+	background-image:url(../img/on_btnSM.png);
+	cursor: pointer;
+}

@@ -45,7 +45,7 @@ module.exports = function (api) {
           return;
         //? Ensure we have only 1 .html file .........................................
         } else { 
-          creativeUrl = `/banners/${client.slug}/${item.slug}/`;
+          creativeUrl = `/banners/${item.slug}/`;
           zipEntries.forEach(function(zipEntry) {
             const entryName = zipEntry.entryName;
             if (entryName.includes('__MACOSX')) {
@@ -88,7 +88,7 @@ module.exports = function (api) {
 
         //? ...define values 
         const oldcreativeUrl = creativeUrl;
-        const clientPath = `banners/${client.slug}`;
+        const clientPath = `banners/`;
         const creativePath = `${clientPath}/${item.slug}`;
         const creativeInternalPath = `static/${creativePath}`;
         const creativeInternalUrl = `${creativeInternalPath}/${item.asset.filename}`;
@@ -111,7 +111,7 @@ module.exports = function (api) {
 
       creative[ci].client = client;
       creative[ci].campaign = campaign || {slug: '-na', title: 'N/A'};
-      creative[ci].creativeUrl = creativeUrl;
+      creative[ci].creativeUrl = `/${creativeUrl}`;
     })
 
     createPage({

@@ -347,7 +347,8 @@ export default {
     top: 0 !important;
     // bottom: auto !important;
     // padding:1em;
-    background: rgba(255,255,255,0);
+    background: rgba(255,255,255,.6);
+    cursor: pointer;
     // background: rgba(255,255,255,1);
     z-index: 200;
     display: flex;
@@ -355,6 +356,7 @@ export default {
     align-items: center;
     align-self: center;
     justify-self: center;
+overflow: auto;
     // box-shadow: 5px 5px 0px 8px var(--darkblue);
     // border: 5px solid var(--lightblue);
 

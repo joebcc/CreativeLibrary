@@ -5,9 +5,9 @@
       <p class="text-lg font-bold font-darkblue mb-4">{{ creative.title }}</p>
       <p class="mb-6">
         <span class="text-sm font-gray" v-if="creative.client">Client: </span>
-        <span class="text-2xl font-bold font-lightblue">{{ creative.client }} </span>
-        <span class="ml-6 text-sm font-gray" v-if="creative.campaign"> Campaign: </span>
-        <span class="text-2xl font-bold font-lightblue">{{ creative.campaign }} </span>
+        <span class="text-2xl font-bold font-lightblue">{{ creative.client.title }} </span>
+        <span class="ml-6 text-sm font-gray" v-if="creative.campaign && creative.campaign.slug !== '-na'"> Campaign: </span>
+        <span class="text-2xl font-bold font-lightblue" v-if="creative.campaign && creative.campaign.slug !== '-na'">{{ creative.campaign.title }} </span>
         <span class="ml-6 text-sm font-gray" v-if="creative.size"> Size: </span>
         <span class="text-2xl font-bold font-lightblue">{{ creative.size }} </span>
       </p>
@@ -24,6 +24,7 @@
 <style lang="scss">
   .creative-preview {
     // height: 100%;
+    cursor:pointer;
     background: white;
     justify-content: center;
     padding: 2rem;
@@ -31,8 +32,10 @@
     flex-direction: column;
     align-items: center;
     border: 5px solid var(--lightblue);
+    align-self: baseline;
+    margin-top: auto;
+    margin-bottom: auto;
   }
-
 </style>
 
 <script>
