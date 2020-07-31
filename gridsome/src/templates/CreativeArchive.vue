@@ -12,3 +12,7 @@ export default {
   }
 }
 </script>
+<style  scoped>
+@import "../styles/styles.scss";
+
+</style>

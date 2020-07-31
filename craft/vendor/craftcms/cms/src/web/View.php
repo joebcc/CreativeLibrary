@@ -102,18 +102,13 @@ class View extends \yii\web\View
      * @var bool Whether to minify CSS registered with [[registerCss()]]
      * @since 3.4.0
      */
-    public $minifyCss;
+    public $minifyCss = false;
 
     /**
      * @var bool Whether to minify JS registered with [[registerJs()]]
      * @since 3.4.0
      */
-    public $minifyJs;
-
-    /**
-     * @var array The sizes that element thumbnails should be rendered in
-     */
-    private static $_elementThumbSizes = [32, 64, 120, 240];
+    public $minifyJs = false;
 
     /**
      * @var Environment|null The Twig environment instance used for control panel templates
@@ -263,23 +258,6 @@ class View extends \yii\web\View
             $this->setTemplateMode(self::TEMPLATE_MODE_CP);
         } else {
             $this->setTemplateMode(self::TEMPLATE_MODE_SITE);
-        }
-
-        if ($this->minifyCss === null || $this->minifyJs === null) {
-            $response = Craft::$app->getResponse();
-            if ($this->minifyCss === null) {
-                $this->minifyCss = (
-                    $response instanceof WebResponse &&
-                    $response->format === WebResponse::FORMAT_HTML
-                );
-            }
-            if ($this->minifyJs === null) {
-                $this->minifyJs = (
-                    $response instanceof WebResponse &&
-                    $response->format === WebResponse::FORMAT_HTML &&
-                    Craft::$app->getConfig()->getGeneral()->useCompressedJs
-                );
-            }
         }
 
         // Register the cp.elements.element hook
@@ -671,8 +649,23 @@ class View extends \yii\web\View
      */
     public function normalizeObjectTemplate(string $template): string
     {
-        // Tokenize objects (call preg_replace_callback() multiple times in case there are nested objects)
         $tokens = [];
+
+        // Tokenize {% verbatim %} tags
+        $template = preg_replace_callback('/\{%-?\s*verbatim\s*-?%\}.*?{%-?\s*endverbatim\s*-?%\}/s', function(array $matches) use (&$tokens) {
+            $token = 'tok_' . StringHelper::randomString(10);
+            $tokens[$token] = $matches[0];
+            return $token;
+        }, $template);
+
+        // Tokenize inline code and code blocks
+        $template = preg_replace_callback('/(?<!`)(`|`{3,})(?!`).*?(?<!`)\1(?!`)/s', function(array $matches) use (&$tokens) {
+            $token = 'tok_' . StringHelper::randomString(10);
+            $tokens[$token] = '{% verbatim %}' . $matches[0] . '{% endverbatim %}';
+            return $token;
+        }, $template);
+
+        // Tokenize objects (call preg_replace_callback() multiple times in case there are nested objects)
         while (true) {
             $template = preg_replace_callback('/\{\s*([\'"]?)\w+\1\s*:[^\{]+?\}/', function(array $matches) use (&$tokens) {
                 $token = 'tok_' . StringHelper::randomString(10);
@@ -685,7 +678,15 @@ class View extends \yii\web\View
         }
 
         // Swap out the remaining {xyz} tags with {{object.xyz}}
-        $template = preg_replace('/(?<!\{)\{\s*(\w+)([^\{]*?)\}/', '{{ (_variables.$1 ?? object.$1)$2|raw }}', $template);
+        $template = preg_replace_callback('/(?<!\{)\{\s*(\w+)([^\{]*?)\}/', function(array $match) {
+            // Is this a function call like `clone()`?
+            if (!empty($match[2]) && $match[2][0] === '(') {
+                $replace = $match[1] . $match[2];
+            } else {
+                $replace = "(_variables.$match[1] ?? object.$match[1])$match[2]";
+            }
+            return "{{ $replace|raw }}";
+        }, $template);
 
         // Bring the objects back
         foreach (array_reverse($tokens) as $token => $value) {
@@ -1569,8 +1570,8 @@ JS;
     public function endPage($ajaxMode = false)
     {
         if (!$ajaxMode && Craft::$app->getRequest()->getIsCpRequest()) {
-            $this->_registeredJs('registeredJsFiles', $this->_registeredJsFiles);
-            $this->_registeredJs('registeredAssetBundles', $this->_registeredAssetBundles);
+            $this->_setJsProperty('registeredJsFiles', $this->_registeredJsFiles);
+            $this->_setJsProperty('registeredAssetBundles', $this->_registeredAssetBundles);
         }
 
         parent::endPage($ajaxMode);
@@ -1923,7 +1924,7 @@ JS;
         return $matches[1] . $marker . $matches[3];
     }
 
-    private function _registeredJs($property, $names)
+    private function _setJsProperty($property, $names)
     {
         if (empty($names)) {
             return;
@@ -1932,7 +1933,7 @@ JS;
         $js = "if (typeof Craft !== 'undefined') {\n";
         foreach (array_keys($names) as $name) {
             if ($name) {
-                $jsName = Json::encode($name);
+                $jsName = Json::encode(str_replace(['<', '>'], '', $name));
                 $js .= "  Craft.{$property}[{$jsName}] = true;\n";
             }
         }
@@ -1972,22 +1973,18 @@ JS;
         // Create the thumb/icon image, if there is one
         // ---------------------------------------------------------------------
 
-        $thumbUrl = $element->getThumbUrl(self::$_elementThumbSizes[0]);
+        $thumbSize = $elementSize === 'small' ? 34 : 120;
+        $thumbUrl = $element->getThumbUrl($thumbSize);
 
         if ($thumbUrl !== null) {
-            $srcsets = [];
+            $imageSize2x = $thumbSize * 2;
+            $thumbUrl2x = $element->getThumbUrl($imageSize2x);
 
-            foreach (self::$_elementThumbSizes as $i => $size) {
-                if ($i == 0) {
-                    $srcset = $thumbUrl;
-                } else {
-                    $srcset = $element->getThumbUrl($size);
-                }
-
-                $srcsets[] = $srcset . ' ' . $size . 'w';
-            }
-
-            $sizesHtml = ($elementSize === 'small' ? self::$_elementThumbSizes[0] : self::$_elementThumbSizes[2]) . 'px';
+            $srcsets = [
+                "$thumbUrl {$thumbSize}w",
+                "$thumbUrl2x {$imageSize2x}w",
+            ];
+            $sizesHtml = "{$thumbSize}px";
             $srcsetHtml = implode(', ', $srcsets);
             $imgHtml = "<div class='elementthumb' data-sizes='{$sizesHtml}' data-srcset='{$srcsetHtml}'></div>";
         } else {

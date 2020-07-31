@@ -30,6 +30,7 @@ use craft\errors\FileException;
 use craft\errors\VolumeObjectNotFoundException;
 use craft\events\AssetEvent;
 use craft\helpers\ArrayHelper;
+use craft\helpers\Assets;
 use craft\helpers\Assets as AssetsHelper;
 use craft\helpers\FileHelper;
 use craft\helpers\Html;
@@ -928,15 +929,18 @@ class Asset extends Element
     /**
      * Returns the element’s full URL.
      *
-     * @param string|array|null $transform The transform that should be applied, if any. Can either be the handle of a named transform, or an array that defines the transform settings.
+     * @param string|array|null $transform The transform that should be applied, if any. Can either be the handle of a named transform, or an array
+     * that defines the transform settings.
+     * @param bool|null $generateNow Whether the transformed image should be generated immediately if it doesn’t exist. If `null`, it will be left
+     * up to the `generateTransformsBeforePageLoad` config setting.
      * @return string|null
      */
-    public function getUrl($transform = null)
+    public function getUrl($transform = null, bool $generateNow = null)
     {
         /** @var Volume $volume */
         $volume = $this->getVolume();
 
-        if (!$volume->hasUrls) {
+        if (!$volume->hasUrls || !$this->folderId) {
             return null;
         }
 
@@ -961,7 +965,7 @@ class Asset extends Element
         }
 
         try {
-            return Craft::$app->getAssets()->getAssetUrl($this, $transform);
+            return Craft::$app->getAssets()->getAssetUrl($this, $transform, $generateNow);
         } catch (VolumeObjectNotFoundException $e) {
             Craft::error("Could not determine asset's URL ({$this->id}): {$e->getMessage()}");
             Craft::$app->getErrorHandler()->logException($e);
@@ -974,7 +978,13 @@ class Asset extends Element
      */
     public function getThumbUrl(int $size)
     {
-        return Craft::$app->getAssets()->getThumbUrl($this, $size, $size, false);
+        if ($this->width && $this->height) {
+            list($width, $height) = Assets::scaledDimensions($this->width, $this->height, $size, $size);
+        } else {
+            $width = $height = $size;
+        }
+
+        return Craft::$app->getAssets()->getThumbUrl($this, $width, $height, false);
     }
 
     /**
@@ -990,6 +1000,7 @@ class Asset extends Element
     {
         $assetsService = Craft::$app->getAssets();
         $srcsets = [];
+        list($width, $height) = Assets::scaledDimensions($this->width ?? 0, $this->height ?? 0, $width, $height);
         $thumbSizes = [
             [$width, $height],
             [$width * 2, $height * 2],
@@ -1561,7 +1572,10 @@ class Asset extends Element
         // Set the field layout
         /** @var Volume $volume */
         $volume = Craft::$app->getAssets()->getFolderById($folderId)->getVolume();
-        $this->fieldLayoutId = $volume->fieldLayoutId;
+
+        if (!$volume instanceof Temp) {
+            $this->fieldLayoutId = $volume->fieldLayoutId;
+        }
 
         return parent::beforeSave($isNew);
     }
@@ -1743,7 +1757,10 @@ class Asset extends Element
         }
 
         if (!$this->_width || !$this->_height) {
-            Craft::warning("Asset {$this->id} is missing its width or height", __METHOD__);
+            if ($this->getScenario() !== self::SCENARIO_CREATE) {
+                Craft::warning("Asset {$this->id} is missing its width or height", __METHOD__);
+            }
+
             return [null, null];
         }
 
@@ -1754,6 +1771,18 @@ class Asset extends Element
         }
 
         $transform = Craft::$app->getAssetTransforms()->normalizeTransform($transform);
+
+        if ($this->_width < $transform->width && $this->_height < $transform->height && !Craft::$app->getConfig()->getGeneral()->upscaleImages) {
+            $transformRatio = $transform->width / $transform->height;
+            $imageRatio = $this->_width / $this->_height;
+
+            if ($transform->mode !== 'crop' || $imageRatio === $transformRatio) {
+                return [$this->_width, $this->_height];
+            }
+
+            return $transformRatio > 1 ? [$this->_width, round($this->_height / $transformRatio)] : [round($this->_width * $transformRatio), $this->_height];
+        }
+
         list($width, $height) = Image::calculateMissingDimension($transform->width, $transform->height, $this->_width, $this->_height);
 
         // Special case for 'fit' since that's the only one whose dimensions vary from the transform dimensions
@@ -1841,6 +1870,7 @@ class Asset extends Element
         $this->folderId = $folderId;
         $this->folderPath = $newFolder->path;
         $this->filename = $filename;
+        $this->_volume = $newVolume;
 
         // If there was a new file involved, update file data.
         if ($tempPath) {

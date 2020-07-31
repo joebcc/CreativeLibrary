@@ -1,192 +1,371 @@
 <template>
-  <div class="creativeGallery">
-    <!-- <div class="flex justify-between p-4 pt-8">
-      <img src="../assets/april6-logo.svg" width="300" />
-      <div class="search grid items-end">
-        <input type="text" v-model="search" class="border w-full p-2">
-      </div> 
-    </div> -->
-    <div class="filters grid grid-cols-5 text-xs p-4 gap-2 text-center justify-center items-center">
-      <img src="../assets/april6logo.svg" width="300" class="col-span-2" />
-      <!-- {{filters}} -->
-      <div 
-        v-for="(filter, name) in filters" 
-        :key="name" 
-        :id="name" 
-        class="filter bg-gray-200 rounded-lg p-4" 
-      >
-        <form class="text-base">
-          {{name}} : 
-          <label :class="filter.selected == 'all' ? 'selected' : ''">
-            <input 
-              :name="name+'any'" 
-              value="all" 
-              checked='true' 
-              type="checkbox" 
-              @click="allToggle(name)"
-            >
-            Any
-          </label>
-          <transition name="fade" tag="div">
-            <div v-if="filter.selected !== 'all'">
-              <label
-                v-for="(option, oi) in filter.list"
-                :key="name + oi"
-                :class="filter.selected.includes(option) ? 'selected' : ''"
-              >
-                <input type="checkbox" :name="name + oi" @click="optionToggle(option, filter.selected)">
-                {{option}}
-              </label>
-            </div>
-          </transition>
-        </form>
+  <div class="creativeGallery grid justify-center grid-cols-5 lg:py-16 lg:px-10">
+    <div class="sidebar">
+      <img src="../assets/april6logo.svg" width="300" class="self-center logo" />
+
+      <div class="my-4">
+        Asset Aggregator
+      </div>
+      <!--! =============== Filters ========================================== -->
+      <div id="filters" class="filters text-xs py-4 justify-center items-center">
+        <Filtera
+          :filter="filters.client"
+          key="client"
+          name="client"
+          v-on:all-toggle="allToggle"
+          v-on:option-toggle="optionToggle"
+        />
+        <Filtera 
+          :filter="filters.assettypes"
+          key="asset"
+          name="assettypes"
+          v-on:all-toggle="allToggle"
+          v-on:option-toggle="optionToggle"
+        />
+        
+        <!-- <div v-for="(client, clientname) in filters.client.selected" :key="clientname">
+          <Filtera 
+            v-if="Object.values(filters.client.list[client].list).length > 1"
+            :filter="filters.client.list[client]" 
+            :name="client" 
+            v-on:all-toggle="allToggle"
+            v-on:option-toggle="optionToggle" 
+          />
+        </div> -->
       </div>
     </div>
-    <transition-group name="fade" tag="div" class="flex flex-vertical flex-wrap p-4">
+
+    <!--! =============== Creatives ========================================== -->
+    <div class="">
       <div 
-        v-for="creative in matchingCreatives" 
-        :key="creative.slug"
-        class="mx-auto text-center mt-8"
+        id="creatives" 
+        v-masonry 
+        :data-time="time"
+        transition-duration="0.3s" 
+        item-selector=".item" 
+        fit-width="true"
       >
-        <Banner :creative="creative"/>
+        <div 
+          v-for="creative in matchingCreatives" 
+          :key="creative.slug"
+          :data-time="time"
+          class="creative item" 
+          v-masonry-tile
+          @click="filters.preview = filters.preview === creative.slug ? '' : creative.slug"
+          :class="filters.preview === creative.slug ? 'preview' : ''"
+        >
+          <component
+            :is="creative.type === 'AssetBanner' ? creative.type : 'AssetImage'"
+            :data-time="time"
+            :creative="creative"
+            v-if="filters.preview !== creative.slug" 
+          />
+          <Preview :creative="creative" v-else v-on:remove-preview="filters.preview = ''" />
+          <div class="overlay"></div> 
+        </div>
       </div>
-    </transition-group>
+
+    </div>
+
   </div>
 </template>
 
-<style scoped>
-.search {
-  max-width: 600px;
-  width: 100%;
-}
-.fade-enter-active, .fade-leave-active {
-  transition: all .3s;
-  max-height: 1000px
-}
-.fade-enter, .fade-leave-to /* .list-leave-active below version 2.1.8 */ {
-  opacity: 0;
-  transform: translateY(30px);
-  max-height: 0px
-}
-</style>
-
 <script>
+
+import Vue from 'vue'
+// import VueMasonryWall from "vue-masonry-wall";
 export default {
   name: 'CreativeGallery', 
   components: {
-    Banner: () => import("../components/EmbeddedBanner.vue")
+    AssetImage: () => import("../components/EmbeddedImage.vue"),
+    AssetBanner: () => import("../components/EmbeddedBanner.vue"),
+    Filtera: () => import("../components/Filter.vue"),
+    Preview: () => import("../components/Preview.vue"),
   },
   props: {
     creatives: Array,
   },
   data() { 
     return {
+      time: Date.now(),
       search: '',
+      sortBy: '',
+      order: 'ascending',
       filters: {
         client: {
-          list:[],
-          selected: 'all',
+          list:{},
+          selected: [],
         },
-        campaign: {
-          list:[],
-          selected: 'all',
+        assettypes: {
+          list:{},
+          selected: [],
         },
-        // assetType: {
+        preview: '',
+        // campaign: {
         //   list:[],
         //   selected: 'all',
         // },
-        size: {
-          list:[],
-          selected: 'all',
-        },
+        // size: {
+        //   list:[],
+        //   selected: 'all',
+        // },
       },
     }
   },
   computed: {
     matchingCreatives: function () {
-      const filters = this.filters;
-      const filtered = this.$props.creatives.filter(function(creative){
-        var check = true;
+      const client = this.filters.client;
+      const types = this.filters.assettypes;
+      //? check every creative individually
+      return this.$props.creatives.filter(function(creative){
+        const campaign = client.list[creative.client.slug];
+        const type = types.list[creative.type];
+        if ((
+            !client.selected.length || //? if client is set to any
+            client.selected.includes(creative.client.slug) //? or if this creative matches the client 
+          ) && (
+            !client.selected.length ||
+            campaign &&
+            (!campaign.selected.length || //? if campaigns are set to all
+            campaign.selected.includes(creative.campaign.slug)) //? or if the creative matches the campaign
+          ) && (
+            !types.selected.length ||
+            types.selected.includes(creative.type)
+          )
+        ) {
+          
+          //? include in results
+          return true;
+          
 
-        Object.entries(filters).forEach(function(filter, fi){
-          const filterName = filter[0]; //! String
-          const searchValue = filter[1].selected; //! 'all' || Array
-          if (searchValue === 'all') { return }
-
-          const creativeValue = creative[filterName]; //! String || Array
-          // console.log('passed 345345345 asdfasdf', searchValue, creativeValue)
-          if (
-            (Array.isArray(searchValue) && searchValue.length === 0)
-            || creativeValue === undefined 
-            || creativeValue === null
-          ) { 
-            console.log('failed empty', searchValue, creativeValue)
-            check = false; 
-            return
-          }
-
-          //! searchValue - Array
-          //! creativeValue - Array || String
-          //? when there's only 1 search query check creative vs search directly
-          if (searchValue.length === 1){
-            if (creativeValue.includes(searchValue)) { 
-              return
-            } else {
-              check = false;
-              return
-            }
-          //? otherwise cross reference the arrays with a filter
-          } else {
-            if (searchValue.filter(val => creativeValue.includes(val)).length > 0) { return } // return as true
-            check = false;
-            return
-            
-          } 
-          // console.log('endo', searchValue, creativeValue, check)
-        })
-        // console.log('endtot', check)
-
-        // if (check === true) {console.log('passed', creative.slug) } 
-        // else { console.log('failed', creative.slug)  }
-        return check;
+        } else {
+          //? do not include in the results
+          return false;
+        }
       });
-      // console.log('filtered', filtered);
-      return filtered;
-    }
+    },
+    
   },
-  created() {
-    const filterFinder = this.filterFinder;
-    this.$props.creatives.forEach(function(creative){
-      filterFinder('client', creative.client)
-      filterFinder('campaign', creative.campaign)
-      // filterFinder('assetType', creative.assetType)
-      filterFinder('size', creative.size)
-    })
+  mounted() {
+    this.redrawGrid();
+    setTimeout(this.redrawGrid, 500);
+    setTimeout(this.redrawGrid, 1000);
+
+  },
+  updated() {
+    this.redrawGrid();
   },
   methods: {
-    filterFinder(filterType, filterObject){
-      // filterObject = filterObject. //! need to filter string to make it play nice with js
-      // console.log('checking ', filterType, ' for ', filterObject)
-      if (!this.filters[filterType].list.includes(filterObject) && filterObject != null) {
-        this.filters[filterType].list.push(filterObject);
-        // console.log('found ', filterObject, ' - adding to ', filterType, ' : ',  this.filters[filterType])
+    xref(a,b){
+      return a.filter(x => b.includes(x));
+    },
+    redrawGrid() {
+      if (typeof this.$redrawVueMasonry === 'function') {
+        this.$redrawVueMasonry('#creatives');
       }
     },
-    optionToggle(option, filter){
-      if (filter.includes(option)) {
-        filter.splice(filter.indexOf(option), 1) 
-      } else{
-         filter.push(option)
+    optionToggle(option, name){
+      const isCampaign = name !== 'client' && name !== 'assettypes';
+
+      if (isCampaign) {  var filter = this.filters.client.list[name] }
+      else { var filter = this.filters[name] }
+
+      //? if the filter was set to any
+      if (filter.selected === []) {
+        filter.selected = [option]
+        // ? set it to the selected option
+
+      //? if the filter was already in place
+      } else if (filter.selected.includes(option)) { 
+        const index = filter.selected.indexOf(option);
+        console.log(name, option, index);
+        filter.selected.splice(index, 1);
+        //? unselect it by removing from the selected list
+
+      //? otherwise there is already a selection in place
+      } else {
+        filter.selected.push(option)
+        //? so add to it
       }
+
+      if (isCampaign) { this.filters.client.list[name] = filter; } 
+      else { this.filters[name] = filter; }
+
+      this.reload();
+      this.redrawGrid();
+      setTimeout(this.redrawGrid, 500);
     },
     allToggle(name) {
-      if (this.filters[name].selected === 'all') {
-        this.filters[name].selected = [];
+      const isCampaign = name !== 'client' && name !=='assettypes';
+      if (isCampaign) {
+        this.filters.client.list[name].selected = [];
       } else {
-        this.filters[name].selected = 'all';
+        this.filters[name].selected = [];
       }
-    }
-  },
+      this.redrawGrid();
+      setTimeout(this.redrawGrid, 500);
+    },
+    reload() {
+      this.time = Date.now();
+    },
+    computeCampaigns: function() {
+      const creatives = this.$props.creatives;
+      var storage = {};
+      creatives.forEach(function(creative) {
+        let client = creative.client.slug;
+        let clientTitle = creative.client.title;
+        let campaign = creative.campaign ? creative.campaign.slug : '-na';
+        let campaignTitle = creative.campaign ? creative.campaign.title : 'N/A';
+        
+        storage[client] = storage[client] || { list: {}, selected: [] } ; //Initiate if clientey does not exist
+        storage[client].title = clientTitle;
+        if (campaign !== undefined){
+          // campaign = campaign.replace(/[^\d\w]/, '');
+          if (!storage[client].list[campaign]) {
+            storage[client].list[campaign]= {
+              title: campaignTitle,
+              count: 1
+            };         
+          } else {
+            storage[client].list[campaign].count += 1;  
+          }
+        }
+      });
+      this.filters.client.list = storage;
+    },
+    sort(list, sortby) {
+      const order = this.order;
+      switch(sortby) {
+        case 'client':
+        case 'campaign':
+        case 'size':
+          const sorted = list.sort(function(a,b){
+            //? if both fields are filled sort alphabetically
+            if(a[sortby] && b[sortby]){
+              if (
+                (order == 'ascending' && a[sortby].toUpperCase() > b[sortby].toUpperCase()) ||
+                (order == 'descending' && a[sortby].toUpperCase() < b[sortby].toUpperCase())
+              ) {
+                return 1
+              } else {
+                return -1;
+              }
+            //? if only one options field is filled put that one first
+            } else if (a[sortby] || b[sortby]) {
+              if (a[sortby]) { return -1 }
+              else { return 1 }
+            } 
+            return -1;
+          });
+          console.log('sorting', sorted)
+          return sorted;
+        default:
+          return list;
+      }
+    },
   //!--  Need to compute all possible filters ( find and filter all clients/campaigns/sizes ) -->
+  },  
+  beforeMount () {
+    const VueMasonryPlugin = require('vue-masonry').VueMasonryPlugin
+    Vue.use(VueMasonryPlugin)
+    if (typeof this.$redrawVueMasonry === "function") {
+      this.$redrawVueMasonry()
+    }
+    this.computeCampaigns();
+    const assettypes = { list:{}, selected: [] };
+    this.creatives.forEach((newval) => {
+      if (newval.type){
+        if (!assettypes.list[newval.type]) {
+          assettypes.list[newval.type] = 1
+        } else {
+          assettypes.list[newval.type] += 1;
+        }
+      } 
+    });
+    this.filters.assettypes = assettypes;
+
+    // this.creatives.forEach(c => {
+      // if (c.type === 'animatedBanner') {
+      //   // c.type = Banner;
+      // }
+      // if (c.type === 'animatedBanner') {
+      //   c.type = Banner;
+      // }
+    // })
+  }
 }
 </script>
+
+
+<style lang="scss">
+.creativeGallery {
+  grid-template-columns: minmax(100px, 150px) 1fr;
+  grid-gap: 2rem;
+}
+.self-center{
+  justify-self: center;
+}
+#creatives {
+  justify-self: center;
+  position: relative;
+}
+.search {
+  max-width: 600px;
+  width: 100%;
+}
+.creative {
+  // position: relative;
+  overflow: hidden; 
+  // background: var(--darkblue);
+  padding: 10px 0 20px; 
+  transition: all .3s ease;
+
+  &:hover{
+    background: var(--lightblue);
+
+    .banner-info {
+      opacity: 1;
+    }
+  }
+
+  .overlay {
+    position: absolute;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    display: block;
+    z-index:99;
+  }
+
+  &.preview {
+    position: fixed !important;
+    width: 100%;
+    height: 100%;
+    left: 0 !important;
+    // right: auto !important;
+    top: 0 !important;
+    // bottom: auto !important;
+    // padding:1em;
+    background: rgba(255,255,255,0);
+    // background: rgba(255,255,255,1);
+    z-index: 200;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    align-self: center;
+    justify-self: center;
+    // box-shadow: 5px 5px 0px 8px var(--darkblue);
+    // border: 5px solid var(--lightblue);
+
+    .banner-container {
+      width: 100%;
+    }
+    .overlay, .banner-info {
+      display: none;
+    }
+  }
+
+}
+</style>
+

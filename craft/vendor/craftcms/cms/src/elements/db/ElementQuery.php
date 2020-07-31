@@ -1386,7 +1386,7 @@ class ElementQuery extends Query implements ElementQueryInterface
         }
 
         if ($this->title !== null && $this->title !== '' && $class::hasTitles()) {
-            $this->subQuery->andWhere(Db::parseParam('content.title', $this->title));
+            $this->subQuery->andWhere(Db::parseParam('content.title', $this->title, '=', true));
         }
 
         if ($this->slug) {
@@ -1971,7 +1971,11 @@ class ElementQuery extends Query implements ElementQueryInterface
             case Element::STATUS_ENABLED:
                 return ['elements.enabled' => true];
             case Element::STATUS_DISABLED:
-                return ['elements.enabled' => false];
+                return [
+                    'or',
+                    ['elements.enabled' => false],
+                    ['elements_sites.enabled' => false],
+                ];
             case Element::STATUS_ARCHIVED:
                 return ['elements.archived' => true];
             default:
@@ -2484,7 +2488,7 @@ class ElementQuery extends Query implements ElementQueryInterface
             throw new QueryAbortedException();
         }
 
-        return $this->$property = ElementHelper::sourceElement($this->$property);
+        return $this->$property;
     }
 
     /**

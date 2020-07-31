@@ -1,45 +1,54 @@
 <template>
-  <div class="banner-container">
-    <iframe :src="'..' + creative.creativeUrl" :width="creative.width" :height="creative.height">
-    </iframe>
-    <div class="text-xs banner-info">
-      <a :href="creative.creativeUrl" class="text-base font-bold mt-2 block">
-        {{ creative.title }}
-      </a>
-      <div v-if="creative.client">
-        Client - <span class="client text-base">{{creative.client}}</span>
-      </div>
-      <div v-if="creative.campaign">
-        Campaign - <span class="campaign text-base">{{creative.campaign}}</span>
-      </div>
-      <div v-if="creative.height || creative.width" class="mb-2">
-        Size - <span class="size text-base">{{creative.width ? creative.width : '?'}} x {{creative.height ? creative.height : '?'}}</span>
-      </div>
-      <!-- <div v-if="creative.date">
-        Date - <span class="date text-base">{{creative.date}}</span>
-      </div> -->
-    </div>
+  <div
+    class="banner-container grid justify-center align-baseline"
+    :style="{ height: (creative.height * sizeDiff) +'px' }"
+  >
+    <iframe
+      :id="creative.slug"
+      :src="'..' + creative.creativeUrl"
+      :width="creative.width"
+      :height="creative.height"
+      :style="{ transform: ratio }"
+    ></iframe>
+    <!-- <div class="text-xs banner-info">
+        <span v-if="creative.client">
+          <span class="client text-base font-bold">{{creative.client}}</span>
+        </span>
+        <span v-if="creative.campaign">
+          <span class="campaign text-base font-bold">, {{creative.campaign}}</span>
+        </span>
+        <span v-if="creative.height || creative.width" class="mb-2">
+          <span
+            class="size text-base font-bold"
+          >- {{creative.width ? creative.width : '?'}} x {{creative.height ? creative.height : '?'}}</span>
+        </span>
+    </div> -->
   </div>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
 .banner-container {
-  background: var(--lightblue);
+  width: 330px;
+  transition: 0.5s ease all;
 }
-  .banner-info{
-    overflow: hidden;
-    display: block;
-    max-height: 0;
-    opacity: 0;
-    transition: .5s ease all;
-  }
-  .banner-container:hover .banner-info {
-    max-height: 1000px;
+.banner-info {
+  opacity: 0;
+  transition: 0.5s ease all;
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  padding: 0 15px 8px;
+  z-index: 100;
+}
+.banner-container:hover {
+  .banner-info {
     opacity: 1;
   }
-  iframe {
-    max-width: 100%;
-  }
+}
+iframe {
+  transform-origin: top;
+  z-index: 10;
+}
 </style>
 
 <script>
@@ -47,6 +56,34 @@ export default {
   name: 'EmbeddedBanner',
   props: {
     creative: Object,
+    fullsize: Boolean,
+  },
+  computed: {
+    sizeDiff() {
+      if (this.$props.fullsize) { return 1 };
+      const width = this.$props.creative.width
+      if ( width > 300) {
+        const ratio =  300 / width;
+        return ratio;
+      }
+      return 1;
+    },
+    ratio() {
+      return `scale(${this.sizeDiff})`;
+    }
+  },
+  mounted() {
+    const slug = this.$props.creative.slug;
+    setTimeout(forceHidden, 300);
+    setTimeout(forceHidden, 1000);
+    setTimeout(forceHidden, 5000);
+
+    function forceHidden() {
+      if(window.frames[slug]) {
+        window.frames[slug].contentDocument.querySelector('html').style.overflow = 'hidden';
+
+      }
+    }
   }
 }
 </script>

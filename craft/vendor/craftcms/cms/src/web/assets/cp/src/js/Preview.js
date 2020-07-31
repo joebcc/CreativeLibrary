@@ -22,6 +22,7 @@ Craft.Preview = Garnish.Base.extend(
         $fieldPlaceholder: null,
 
         isActive: false,
+        isVisible: false,
         activeTarget: 0,
         draftId: null,
         url: null,
@@ -33,7 +34,6 @@ Craft.Preview = Garnish.Base.extend(
         dragger: null,
         dragStartEditorWidth: null,
 
-        _slideInOnIframeLoad: false,
         _updateIframeProxy: null,
 
         _editorWidth: null,
@@ -92,8 +92,8 @@ Craft.Preview = Garnish.Base.extend(
 
             if (!this.$editor) {
                 this.$shade = $('<div/>', {'class': 'modal-shade dark'}).appendTo(Garnish.$bod);
-                this.$editorContainer = $('<div/>', {'class': 'lp-editor-container'}).appendTo(Garnish.$bod);
                 this.$previewContainer = $('<div/>', {'class': 'lp-preview-container'}).appendTo(Garnish.$bod);
+                this.$editorContainer = $('<div/>', {'class': 'lp-editor-container'}).appendTo(Garnish.$bod);
 
                 var $editorHeader = $('<header/>', {'class': 'flex'}).appendTo(this.$editorContainer);
                 this.$editor = $('<form/>', {'class': 'lp-editor'}).appendTo(this.$editorContainer);
@@ -145,7 +145,7 @@ Craft.Preview = Garnish.Base.extend(
             this.handleWindowResize();
             this.addListener(Garnish.$win, 'resize', 'handleWindowResize');
 
-            this.$editorContainer.css(Craft.left, -(this.editorWidthInPx + Craft.Preview.dragHandleWidth) + 'px');
+            this.$editorContainer.css(Craft.left, -this.editorWidthInPx + 'px');
             this.$previewContainer.css(Craft.right, -this.getIframeWidth());
 
             // Find the fields, excluding nested fields
@@ -176,12 +176,13 @@ Craft.Preview = Garnish.Base.extend(
                 }
             }
 
-            this._slideInOnIframeLoad = true;
             this.updateIframe();
 
             this.draftEditor.on('update', this._updateIframeProxy);
             Garnish.on(Craft.BaseElementEditor, 'saveElement', this._updateIframeProxy);
             Garnish.on(Craft.AssetImageEditor, 'save', this._updateIframeProxy);
+
+            Craft.ElementThumbLoader.retryAll();
 
             this.trigger('open');
         },
@@ -206,6 +207,10 @@ Craft.Preview = Garnish.Base.extend(
         },
 
         slideIn: function() {
+            if (!this.isActive || this.isVisible) {
+                return;
+            }
+
             $('html').addClass('noscroll');
             this.$shade.velocity('fadeIn');
 
@@ -221,10 +226,12 @@ Craft.Preview = Garnish.Base.extend(
                     }
                 });
             }, this));
+
+            this.isVisible = true;
         },
 
         close: function() {
-            if (!this.isActive) {
+            if (!this.isActive || !this.isVisible) {
                 return;
             }
 
@@ -241,7 +248,7 @@ Craft.Preview = Garnish.Base.extend(
 
             this.$shade.delay(200).velocity('fadeOut');
 
-            this.$editorContainer.velocity('stop').animateLeft(-(this.editorWidthInPx + Craft.Preview.dragHandleWidth), 'slow', $.proxy(function() {
+            this.$editorContainer.velocity('stop').animateLeft(-this.editorWidthInPx, 'slow', $.proxy(function() {
                 for (var i = 0; i < this.fields.length; i++) {
                     this.fields[i].$newClone.remove();
                 }
@@ -257,7 +264,10 @@ Craft.Preview = Garnish.Base.extend(
             Garnish.off(Craft.BaseElementEditor, 'saveElement', this._updateIframeProxy);
             Garnish.off(Craft.AssetImageEditor, 'save', this._updateIframeProxy);
 
+            Craft.ElementThumbLoader.retryAll();
+
             this.isActive = false;
+            this.isVisible = false;
             this.trigger('close');
         },
 
@@ -278,7 +288,7 @@ Craft.Preview = Garnish.Base.extend(
         },
 
         getIframeWidth: function() {
-            return Garnish.$win.width() - (this.editorWidthInPx + Craft.Preview.dragHandleWidth);
+            return Garnish.$win.width() - this.editorWidthInPx;
         },
 
         updateWidths: function() {
@@ -311,6 +321,7 @@ Craft.Preview = Garnish.Base.extend(
 
             // If this is an existing preview target, make sure it wants to be refreshed automatically
             if (!refresh) {
+                this.slideIn();
                 return;
             }
 
@@ -354,20 +365,14 @@ Craft.Preview = Garnish.Base.extend(
 
                 this.url = url;
                 this.$iframe = $iframe;
-                this.afterUpdateIframe();
-            }.bind(this));
-        },
 
-        afterUpdateIframe: function() {
-            this.trigger('afterUpdateIframe', {
-                target: this.draftEditor.settings.previewTargets[this.activeTarget],
-                $iframe: this.$iframe,
-            });
+                this.trigger('afterUpdateIframe', {
+                    target: this.draftEditor.settings.previewTargets[this.activeTarget],
+                    $iframe: this.$iframe,
+                });
 
-            if (this._slideInOnIframeLoad) {
                 this.slideIn();
-                this._slideInOnIframeLoad = false;
-            }
+            }.bind(this));
         },
 
         _getClone: function($field) {
@@ -409,5 +414,4 @@ Craft.Preview = Garnish.Base.extend(
     {
         defaultEditorWidth: 0.33,
         minEditorWidthInPx: 320,
-        dragHandleWidth: 2,
     });

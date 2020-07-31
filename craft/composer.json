@@ -1,8 +1,10 @@
 {
   "require": {
-    "billythekid/conditional-fields": "0.0.5",
-    "craftcms/cms": "^3.4.0",
+    "billythekid/conditional-fields": "0.0.6",
+    "craftcms/cms": "3.4.29.1",
     "craftcms/element-api": "2.6.0",
+    "nerds-and-company/schematic": "4.1.1",
+    "venveo/craft-bulkedit": "2.0.5",
     "vlucas/phpdotenv": "^3.4.0"
   },
   "require-dev": {
@@ -25,4 +27,5 @@
       "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
     ]
   }
+  
 }

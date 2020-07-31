@@ -42,6 +42,8 @@ use yii\db\Exception as DbException;
  */
 class Connection extends \yii\db\Connection
 {
+    use PrimaryReplicaTrait;
+
     const DRIVER_MYSQL = 'mysql';
     const DRIVER_PGSQL = 'pgsql';
 
@@ -109,11 +111,11 @@ class Connection extends \yii\db\Connection
      * Returns the version of the DB.
      *
      * @return string
+     * @deprecated in 3.4.21. Use [[\yii\db\Schema::getServerVersion()]] instead.
      */
     public function getVersion(): string
     {
-        $version = $this->getMasterPdo()->getAttribute(\PDO::ATTR_SERVER_VERSION);
-        return App::normalizeVersion($version);
+        return App::normalizeVersion($this->getSchema()->getServerVersion());
     }
 
     /**

@@ -514,6 +514,7 @@ class ProjectConfig extends Component
         $baseFile = Craft::$app->getPath()->getProjectConfigFilePath();
         $this->_saveConfig($loadedConfig, $baseFile);
         $this->updateParsedConfigTimesAfterRequest();
+        $this->saveModifiedConfigData();
     }
 
     /**
@@ -529,7 +530,7 @@ class ProjectConfig extends Component
         }
 
         // Disable read/write splitting for the remainder of this request
-        Craft::$app->getDb()->enableSlaves = false;
+        Craft::$app->getDb()->enableReplicas = false;
 
         $this->_applyingYamlChanges = true;
         Craft::$app->getCache()->delete(self::CACHE_KEY);
@@ -610,7 +611,7 @@ class ProjectConfig extends Component
             $storedConfig = $this->_getStoredConfig();
             $oldValue = $this->_traverseDataArray($storedConfig, $path);
             $newValue = $this->get($path, true);
-            return Json::encode($oldValue) !== Json::encode($newValue);
+            return $this->encodeValueAsString($oldValue) !== $this->encodeValueAsString($newValue);
         }
 
         $changes = $this->_getPendingChanges();
@@ -663,7 +664,7 @@ class ProjectConfig extends Component
         }
 
         $newValue = $this->get($path, true);
-        $valueChanged = $triggerUpdate || $this->forceUpdate || Json::encode($oldValue) !== Json::encode($newValue);
+        $valueChanged = $triggerUpdate || $this->forceUpdate || $this->encodeValueAsString($oldValue) !== $this->encodeValueAsString($newValue);
 
         if ($valueChanged && !$this->muteEvents) {
             $event = new ConfigEvent(compact('path', 'oldValue', 'newValue'));
@@ -770,7 +771,7 @@ class ProjectConfig extends Component
 
                     foreach ($currentSet['added'] as $key => $value) {
                         // Prepare for storage
-                        $dbValue = Json::encode($value);
+                        $dbValue = $this->encodeValueAsString($value);
                         if (!mb_check_encoding($value, 'UTF-8') || ($isMysql && StringHelper::containsMb4($dbValue))) {
                             $dbValue = 'base64:' . base64_encode($dbValue);
                         }
@@ -848,7 +849,7 @@ class ProjectConfig extends Component
             }
 
             $info = Craft::$app->getInfo();
-            $info->configMap = Json::encode($configMap);
+            $info->configMap = $this->encodeValueAsString($configMap);
             Craft::$app->saveInfoAfterRequest();
         }
     }
@@ -1674,7 +1675,7 @@ class ProjectConfig extends Component
 
         $appliedChanges = [];
 
-        $modified = Json::encode($oldValue) !== Json::encode($newValue);
+        $modified = $this->encodeValueAsString($oldValue) !== $this->encodeValueAsString($newValue);
 
         if ($newValue !== null && ($oldValue === null || $modified)) {
             if (!is_scalar($newValue)) {
@@ -1745,7 +1746,7 @@ class ProjectConfig extends Component
 
         // See if we can get away with using the cached data
         $dependency = new DbQueryDependency([
-            'db' => Craft::$app->getDb(),
+            'db' => 'db',
             'query' => $this->_createProjectConfigQuery()
                 ->select(['value'])
                 ->where(['path' => 'dateModified']),
@@ -2518,6 +2519,7 @@ class ProjectConfig extends Component
             ->select([
                 'name',
                 'scope',
+                'isPublic',
                 'uid',
             ])
             ->from([Table::GQLSCHEMAS])
@@ -2526,10 +2528,11 @@ class ProjectConfig extends Component
 
         foreach ($scopeRows as &$row) {
             unset($row['uid']);
+            $row['isPublic'] = (bool) $row['isPublic'];
             $row['scope'] = Json::decodeIfJson($row['scope']);
         }
 
-        return ['scopes' => $scopeRows];
+        return ['schemas' => $scopeRows];
     }
 
     /**
@@ -2604,5 +2607,16 @@ class ProjectConfig extends Component
         }
 
         return $fieldLayouts;
+    }
+
+    /**
+     * Returns a project config compatible value encoded for storage.
+     *
+     * @param $value
+     * @return string
+     */
+    protected function encodeValueAsString($value): string
+    {
+        return  Json::encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
     }
 }

@@ -1,0 +1,66 @@
+@import url("https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/1.3.3/tailwind.min.css");
+
+
+:root {
+  --green: #00698B;
+  --blue: #0000CF;
+  --white: #FFFFFF;
+  --gray: #DBDBDB;
+  --darkblue: #0B0747;
+  --offwhite: #F2F4F7;
+  --lightblue: #36D1FF;
+  --purple: #7E00FF;
+  --red: #FF004F;
+}
+.logo {
+  width: 135px;
+  height: auto;
+}
+label {
+  position: relative;
+  font-weight: bolder;
+  transition: .3s ease all;
+  display: block;
+  width: min-content;
+  color: var(--darkblue);
+  padding: .1rem 0rem;
+  margin: .0rem 0;
+  border-radius: 8px;
+  font-size: 24px;
+}
+label.selected {
+  color: var(--lightblue); 
+} 
+label input {
+  opacity: 0;
+  position: absolute;
+}
+.subfilter label {
+  font-weight: normal;
+  font-size: 18px;
+}
+.filter-title {
+  padding-bottom: .5rem;
+  padding-top: 2rem;
+  color: var(--gray);
+  border-bottom: 1px solid var(--gray);
+}
+.fade-enter-active, .fade-leave-active {
+  transition: all .3s ease;
+  max-height: 1000px
+}
+.fade-enter, 
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(30px);
+  max-height: 0;
+}
+.font-darkblue {
+  color: var(--darkblue);
+}
+.font-lightblue {
+  color: var(--lightblue);
+}
+.font-gray {
+  color: var(--gray);
+}

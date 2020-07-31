@@ -182,6 +182,7 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
                 self::PROPAGATION_METHOD_ALL
             ]
         ];
+        $rules[] = [['blockTypes'], ArrayValidator::class, 'min' => 1, 'skipOnEmpty' => false];
         $rules[] = [['minBlocks', 'maxBlocks'], 'integer', 'min' => 0];
         return $rules;
     }
@@ -366,7 +367,8 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
         $view->registerJs(
             'new Craft.MatrixConfigurator(' .
             Json::encode($fieldTypeInfo, JSON_UNESCAPED_UNICODE) . ', ' .
-            Json::encode($view->getNamespace(), JSON_UNESCAPED_UNICODE) .
+            Json::encode($view->getNamespace(), JSON_UNESCAPED_UNICODE) . ', ' .
+            Json::encode($view->namespaceInputName('blockTypes[__BLOCK_TYPE__][fields][__FIELD__][typesettings]')) .
             ');'
         );
 
@@ -547,6 +549,7 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
                     ->where("[[matrixblocks_$ns.ownerId]] = [[elements.id]]")
                     ->andWhere([
                         "matrixblocks_$ns.fieldId" => $this->id,
+                        "elements_$ns.enabled" => true,
                         "elements_$ns.dateDeleted" => null,
                     ])
             ];
@@ -634,7 +637,11 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
 
         // Get the block types data
         $blockTypeInfo = $this->_getBlockTypeInfoForInput($element, $blockTypes);
-        $createDefaultBlocks = $this->minBlocks != 0 && count($blockTypeInfo) === 1;
+        $createDefaultBlocks = (
+            $this->minBlocks != 0 &&
+            count($blockTypeInfo) === 1 &&
+            (!$element || !$element->hasErrors($this->handle))
+        );
         $staticBlocks = (
             $createDefaultBlocks &&
             $this->minBlocks == $this->maxBlocks &&
@@ -1029,12 +1036,6 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
     {
         $fieldTypes = [];
 
-        // Set a temporary namespace for these
-        $view = Craft::$app->getView();
-        $originalNamespace = $view->getNamespace();
-        $namespace = $view->namespaceInputName('blockTypes[__BLOCK_TYPE__][fields][__FIELD__][typesettings]', $originalNamespace);
-        $view->setNamespace($namespace);
-
         foreach (Craft::$app->getFields()->getAllFieldTypes() as $class) {
             /** @var Field|string $class */
             // No Matrix-Inception, sorry buddy.
@@ -1042,24 +1043,14 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
                 continue;
             }
 
-            $view->startJsBuffer();
-            /** @var FieldInterface $field */
-            $field = new $class();
-            $settingsBodyHtml = $view->namespaceInputs((string)$field->getSettingsHtml());
-            $settingsFootHtml = $view->clearJsBuffer();
-
             $fieldTypes[] = [
                 'type' => $class,
                 'name' => $class::displayName(),
-                'settingsBodyHtml' => $settingsBodyHtml,
-                'settingsFootHtml' => $settingsFootHtml,
             ];
         }
 
         // Sort them by name
         ArrayHelper::multisort($fieldTypes, 'name');
-
-        $view->setNamespace($originalNamespace);
 
         return $fieldTypes;
     }

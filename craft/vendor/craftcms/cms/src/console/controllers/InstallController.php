@@ -56,6 +56,7 @@ class InstallController extends Controller
      */
     public $language;
 
+    /** @inheritdoc */
     public $defaultAction = 'craft';
 
     /**
@@ -290,7 +291,7 @@ class InstallController extends Controller
             goto top;
         }
         if (!$this->validatePassword($password, $error)) {
-            Console::output($error);
+            $this->stdout($error . PHP_EOL);
             goto top;
         }
         $this->stdout('Confirm: ');

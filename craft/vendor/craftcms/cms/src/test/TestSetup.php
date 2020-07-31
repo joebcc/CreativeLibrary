@@ -102,6 +102,11 @@ class TestSetup
     private static $_parsedProjectConfig = [];
 
     /**
+     * @var Config|null An instance of the config service.
+     */
+    private static $_configService = null;
+
+    /**
      * Creates a craft object to play with. Ensures the Craft::$app service locator is working.
      *
      * @return mixed
@@ -228,7 +233,7 @@ class TestSetup
         Craft::setAlias('@templates', CraftTest::normalizePathSeparators(Craft::getAlias('@templates')));
         Craft::setAlias('@translations', CraftTest::normalizePathSeparators(Craft::getAlias('@translations')));
 
-        $configService = self::createConfigService();
+        $configService = self::$_configService ?? self::createConfigService();
 
         $config = ArrayHelper::merge(
             [
@@ -313,6 +318,7 @@ class TestSetup
         $contentMigrationsPath = realpath(CRAFT_MIGRATIONS_PATH);
         $storagePath = realpath(CRAFT_STORAGE_PATH);
         $templatesPath = realpath(CRAFT_TEMPLATES_PATH);
+        $testsPath = realpath(CRAFT_TESTS_PATH);
         $translationsPath = realpath(CRAFT_TRANSLATIONS_PATH);
 
         // Log errors to craft/storage/logs/phperrors.log
@@ -328,7 +334,6 @@ class TestSetup
         defined('CURLOPT_CONNECTTIMEOUT_MS') || define('CURLOPT_CONNECTTIMEOUT_MS', 156);
 
         $libPath = dirname(__DIR__, 2) . '/lib';
-
         $srcPath = dirname(__DIR__);
 
         require $libPath . '/yii2/Yii.php';
@@ -342,7 +347,21 @@ class TestSetup
         Craft::setAlias('@contentMigrations', $contentMigrationsPath);
         Craft::setAlias('@storage', $storagePath);
         Craft::setAlias('@templates', $templatesPath);
+        Craft::setAlias('@tests', $testsPath);
         Craft::setAlias('@translations', $translationsPath);
+
+        self::$_configService = self::createConfigService();
+        $generalConfig = self::$_configService->getConfigFromFile('general');
+
+        // Set any custom aliases
+        $customAliases = $generalConfig['aliases'] ?? $generalConfig['environmentVariables'] ?? null;
+        if (is_array($customAliases)) {
+            foreach ($customAliases as $name => $value) {
+                if (is_string($value)) {
+                    Craft::setAlias($name, $value);
+                }
+            }
+        }
 
         // Prevent `headers already sent` error when running tests in PhpStorm
         // https://stackoverflow.com/questions/31175636/headers-already-sent-running-unit-tests-in-phpstorm
@@ -383,7 +402,8 @@ class TestSetup
     public static function getSeedProjectConfigData(bool $asYaml = true)
     {
         // Get the file path
-        $projectConfigFile = \craft\test\Craft::$testConfig['projectConfig']['file'] ?? null;
+        $config = \craft\test\Craft::$instance->_getConfig('projectConfig');
+        $projectConfigFile = $config['file'] ?? null;
         if (!$projectConfigFile) {
             return null;
         }
@@ -411,21 +431,19 @@ class TestSetup
      */
     public static function useProjectConfig()
     {
-        $projectConfig = \craft\test\Craft::$testConfig['projectConfig'] ?? [];
+        $config = \craft\test\Craft::$instance->_getConfig('projectConfig');
 
-        if ($projectConfig &&
-            isset($projectConfig['file'])
-        ) {
-            // Fail hard if someone has specified a project config file but doesn't have project config enabled.
-            // Prevent's confusion of https://github.com/craftcms/cms/pulls/4711
-            if (!Craft::$app->getConfig()->getGeneral()->useProjectConfigFile) {
-                throw new InvalidArgumentException('Please enable the `useProjectConfigFile` option in `general.php`');
-            }
-
-            return $projectConfig;
+        if (!isset($config['file'])) {
+            return false;
         }
 
-        return false;
+        // Fail hard if someone has specified a project config file but doesn't have project config enabled.
+        // Prevent's confusion of https://github.com/craftcms/cms/pulls/4711
+        if (!Craft::$app->getConfig()->getGeneral()->useProjectConfigFile) {
+            throw new InvalidArgumentException('Please enable the `useProjectConfigFile` option in `general.php`');
+        }
+
+        return $config;
     }
 
     /**
@@ -497,7 +515,7 @@ class TestSetup
 
         foreach ($serviceMap as $craftComponent) {
             $class = $craftComponent[0];
-            list ($accessMethod, $accessProperty) = $craftComponent[1];
+            [$accessMethod, $accessProperty] = $craftComponent[1];
 
             // Create a mock.
             $mock = self::getMock($test, $class);

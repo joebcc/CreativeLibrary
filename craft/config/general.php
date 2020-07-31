@@ -7,7 +7,6 @@
  *
  * @see \craft\config\GeneralConfig
  */
-
 return [
     // Global settings
     '*' => [

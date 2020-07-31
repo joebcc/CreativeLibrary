@@ -5,6 +5,8 @@
 // To restart press CTRL + C in terminal and run `gridsome develop`
 
 module.exports = {
-  siteName: 'Gridsome',
-  plugins: []
+  siteName: 'A6 Creative Library',
+  plugins: [
+    // { src: '~/plugins/vue-masonry', ssr: false }
+  ]
 }

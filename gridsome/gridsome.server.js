@@ -6,20 +6,29 @@
 // To restart press CTRL + C in terminal and run `gridsome develop`
 const axios = require('axios')
 const AdmZip = require('adm-zip');
+const fs = require('fs'); 
 
 module.exports = function (api) {
   api.createManagedPages(async ({ createPage }) => {
     const craftUrl = 'http://a6creative-craft.dev.cc/craft/web/'
     const { data } = await axios.get(`${craftUrl}creative.json`);
     const creative = data.data;
+    console.log('client', creative[0].clients)
 
     //? Begin Loop through each imported creative asset ============================================================
     creative.forEach((item, ci) => {
-      const assettype = 'banner'; // hard coding banner for now - should eventually be computed by filetype or set in CMS
+      // const assettype = 'banner'; //// hard coding banner for now - should eventually be computed by filetype or set in CMS
+      const assettype =  item.type;
+      const client = item.clients.filter((a) => a.level == 1)[0];
+      const campaign = item.clients.filter((a) => a.level == 2)[0];
+
+      // item.client = client ? client : 'N/A';
+      // item.campaign = campaign ? campaign : 'N/A';
+
       var creativeUrl = `../craft/web/assets/creative/${item.asset.path}`;
 
       //? When dealing with banners ------------------------------------------------
-      if (assettype === 'banner' && creativeUrl.includes('.zip')) {
+      if (assettype === 'AssetBanner' && creativeUrl.includes('.zip')) {
         //? Unzip the compressed folder and search for html files
         const zip = new AdmZip(creativeUrl);
         const zipEntries = zip.getEntries(); // an array of ZipEntry records
@@ -36,7 +45,7 @@ module.exports = function (api) {
           return;
         //? Ensure we have only 1 .html file .........................................
         } else { 
-          creativeUrl = `/banners/${item.client}/${item.slug}/`;
+          creativeUrl = `/banners/${client}/${item.slug}/`;
           zipEntries.forEach(function(zipEntry) {
             const entryName = zipEntry.entryName;
             if (entryName.includes('__MACOSX')) {
@@ -50,9 +59,9 @@ module.exports = function (api) {
               if (internalpath && internalpath[1]) {
                 internalURL += internalpath[1];
               }
-              zip.extractEntryTo(entryName, `static/${internalURL}`, /*maintainEntryPath*/false, /*overwrite*/true)
+              zip.extractEntryTo(entryName, `static${internalURL}`, /*maintainEntryPath*/false, /*overwrite*/true)
             } else {
-              zip.extractEntryTo(entryName, `static/${creativeUrl}`, /*maintainEntryPath*/false, /*overwrite*/true)
+              zip.extractEntryTo(entryName, `static${creativeUrl}`, /*maintainEntryPath*/false, /*overwrite*/true)
             }
 
 
@@ -73,20 +82,36 @@ module.exports = function (api) {
           }
 
         }
-      } //? end banners --------------------------------------------------------
+      //? end banners --------------------------------------------------------
+      } else {
+        //? When dealing with Images... ------------------------------------------------
 
-      item.creativeUrl = creativeUrl;
-      createPage({
-        path: `/${item.slug}`,
-        component: './src/templates/CreativeSingle.vue',
-        context: {
-          ...item,
-          width: width,
-          height: height,
-          size: width + 'x' + height,
-          creativeUrl: creativeUrl,
-        }
-      })
+        //? ...define values 
+        const oldcreativeUrl = creativeUrl;
+        const clientPath = `banners/${client.slug}`;
+        const creativePath = `${clientPath}/${item.slug}`;
+        const creativeInternalPath = `static/${creativePath}`;
+        const creativeInternalUrl = `${creativeInternalPath}/${item.asset.filename}`;
+        creativeUrl = `${creativePath}/${item.asset.filename}`;
+
+        fs.promises.mkdir(creativeInternalPath, { recursive: true }, (errr) => {
+          if (errr) {throw errr} else { console.log('making', creativeInternalPath );}
+        }).then(() => {
+          
+          fs.promises.copyFile(oldcreativeUrl, `${creativeInternalUrl}`, function (err) {
+            if (err) { 
+              console.log('error in copy', creativeInternalUrl);
+              throw err
+            };
+            console.log('saved', creativeInternalUrl);
+          })
+          
+        })
+      }
+
+      creative[ci].client = client;
+      creative[ci].campaign = campaign || {slug: '-na', title: 'N/A'};
+      creative[ci].creativeUrl = creativeUrl;
     })
 
     createPage({

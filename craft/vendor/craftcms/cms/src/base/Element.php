@@ -167,6 +167,34 @@ abstract class Element extends Component implements ElementInterface
 
     /**
      * @event DefineEagerLoadingMapEvent The event that is triggered when defining an eager-loading map.
+     *
+     * ```php
+     * use craft\base\Element;
+     * use craft\db\Query;
+     * use craft\elements\Entry;
+     * use craft\events\DefineEagerLoadingMapEvent;
+     * use craft\helpers\ArrayHelper;
+     * use yii\base\Event;
+     *
+     * // Add support for `with(['bookClub'])` to entries
+     * Event::on(
+     *     Entry::class,
+     *     Element::EVENT_DEFINE_EAGER_LOADING_MAP,
+     *     function(DefineEagerLoadingMapEvent $e) {
+     *         if ($e->handle === 'bookClub') {
+     *             $bookEntryIds = ArrayHelper::getColumn($e->sourceElements, 'id');
+     *             $e->elementType = \my\plugin\BookClub::class,
+     *             $e->map = (new Query)
+     *                 ->select(['source' => 'bookId', 'target' => 'clubId'])
+     *                 ->from('{{%bookclub_books}}')
+     *                 ->where(['bookId' => $bookEntryIds])
+     *                 ->all();
+     *             $e->handled = true;
+     *         }
+     *     }
+     * );
+     * ```
+     *
      * @since 3.1.0
      */
     const EVENT_DEFINE_EAGER_LOADING_MAP = 'defineEagerLoadingMap';
@@ -690,7 +718,7 @@ abstract class Element extends Component implements ElementInterface
     protected static function defineSortOptions(): array
     {
         // Default to the available table attributes
-        $tableAttributes = Craft::$app->getElementIndexes()->getAvailableTableAttributes(static::class);
+        $tableAttributes = Craft::$app->getElementIndexes()->getAvailableTableAttributes(static::class, false);
         $sortOptions = [];
 
         foreach ($tableAttributes as $key => $labelInfo) {
@@ -1835,7 +1863,7 @@ abstract class Element extends Component implements ElementInterface
     {
         return static::find()
             ->structureId($this->structureId)
-            ->ancestorOf(ElementHelper::sourceElement($this))
+            ->ancestorOf($this)
             ->siteId($this->siteId)
             ->ancestorDist($dist);
     }
@@ -1847,7 +1875,12 @@ abstract class Element extends Component implements ElementInterface
     {
         // Eager-loaded?
         if (($descendants = $this->getEagerLoadedElements('descendants')) !== null) {
-            return $descendants;
+            if ($dist === null) {
+                return $descendants;
+            }
+            return ArrayHelper::where($descendants, function(self $element) use ($dist) {
+                return $element->level <= $this->level + $dist;
+            });
         }
 
         return static::find()
@@ -1877,7 +1910,7 @@ abstract class Element extends Component implements ElementInterface
     {
         return static::find()
             ->structureId($this->structureId)
-            ->siblingOf(ElementHelper::sourceElement($this))
+            ->siblingOf($this)
             ->siteId($this->siteId);
     }
 
@@ -1890,7 +1923,7 @@ abstract class Element extends Component implements ElementInterface
             /** @var ElementQuery $query */
             $query = $this->_prevSibling = static::find();
             $query->structureId = $this->structureId;
-            $query->prevSiblingOf = ElementHelper::sourceElement($this);
+            $query->prevSiblingOf = $this;
             $query->siteId = $this->siteId;
             $query->anyStatus();
             $this->_prevSibling = $query->one();
@@ -1912,7 +1945,7 @@ abstract class Element extends Component implements ElementInterface
             /** @var ElementQuery $query */
             $query = $this->_nextSibling = static::find();
             $query->structureId = $this->structureId;
-            $query->nextSiblingOf = ElementHelper::sourceElement($this);
+            $query->nextSiblingOf = $this;
             $query->siteId = $this->siteId;
             $query->anyStatus();
             $this->_nextSibling = $query->one();
@@ -1965,10 +1998,8 @@ abstract class Element extends Component implements ElementInterface
      */
     public function isDescendantOf(ElementInterface $element): bool
     {
-        /** @var Element $source */
-        $source = ElementHelper::sourceElement($this);
         /** @var Element $element */
-        return ($source->root == $element->root && $source->lft > $element->lft && $source->rgt < $element->rgt);
+        return ($this->root == $element->root && $this->lft > $element->lft && $this->rgt < $element->rgt);
     }
 
     /**
@@ -1987,10 +2018,8 @@ abstract class Element extends Component implements ElementInterface
      */
     public function isChildOf(ElementInterface $element): bool
     {
-        /** @var Element $source */
-        $source = ElementHelper::sourceElement($this);
         /** @var Element $element */
-        return ($source->root == $element->root && $source->level == $element->level + 1 && $source->isDescendantOf($element));
+        return ($this->root == $element->root && $this->level == $element->level + 1 && $this->isDescendantOf($element));
     }
 
     /**
@@ -1998,15 +2027,13 @@ abstract class Element extends Component implements ElementInterface
      */
     public function isSiblingOf(ElementInterface $element): bool
     {
-        /** @var Element $source */
-        $source = ElementHelper::sourceElement($this);
         /** @var Element $element */
-        if ($source->root == $element->root && $source->level !== null && $source->level == $element->level) {
-            if ($source->level == 1 || $source->isPrevSiblingOf($element) || $source->isNextSiblingOf($element)) {
+        if ($this->root == $element->root && $this->level !== null && $this->level == $element->level) {
+            if ($this->level == 1 || $this->isPrevSiblingOf($element) || $this->isNextSiblingOf($element)) {
                 return true;
             }
 
-            $parent = $source->getParent();
+            $parent = $this->getParent();
 
             if ($parent) {
                 return $element->isDescendantOf($parent);
@@ -2021,10 +2048,8 @@ abstract class Element extends Component implements ElementInterface
      */
     public function isPrevSiblingOf(ElementInterface $element): bool
     {
-        /** @var Element $source */
-        $source = ElementHelper::sourceElement($this);
         /** @var Element $element */
-        return ($source->root == $element->root && $source->level == $element->level && $source->rgt == $element->lft - 1);
+        return ($this->root == $element->root && $this->level == $element->level && $this->rgt == $element->lft - 1);
     }
 
     /**
@@ -2032,10 +2057,8 @@ abstract class Element extends Component implements ElementInterface
      */
     public function isNextSiblingOf(ElementInterface $element): bool
     {
-        /** @var Element $source */
-        $source = ElementHelper::sourceElement($this);
         /** @var Element $element */
-        return ($source->root == $element->root && $source->level == $element->level && $source->lft == $element->rgt + 1);
+        return ($this->root == $element->root && $this->level == $element->level && $this->lft == $element->rgt + 1);
     }
 
     /**

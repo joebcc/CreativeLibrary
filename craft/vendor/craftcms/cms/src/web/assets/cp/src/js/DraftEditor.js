@@ -19,6 +19,7 @@ Craft.DraftEditor = Garnish.Base.extend(
 
         lastSerializedValue: null,
         listeningForChanges: false,
+        pauseLevel: 0,
         timeout: null,
         saving: false,
         saveXhr: null,
@@ -100,7 +101,7 @@ Craft.DraftEditor = Garnish.Base.extend(
         },
 
         listenForChanges: function() {
-            if (this.listeningForChanges) {
+            if (this.listeningForChanges || this.pauseLevel > 0) {
                 return;
             }
 
@@ -121,9 +122,32 @@ Craft.DraftEditor = Garnish.Base.extend(
         },
 
         stopListeningForChanges: function() {
+            if (!this.listeningForChanges) {
+                return;
+            }
+
             this.removeListener(Garnish.$bod, 'keypress,keyup,change,focus,blur,click,mousedown,mouseup');
             clearTimeout(this.timeout);
             this.listeningForChanges = false;
+        },
+
+        pause: function() {
+            this.pauseLevel++;
+            this.stopListeningForChanges();
+        },
+
+        resume: function() {
+            if (this.pauseLevel === 0) {
+                throw 'Craft.DraftEditor::resume() should only be called after pause().';
+            }
+
+            // Only actually resume operation if this has been called the same
+            // number of times that pause() was called
+            this.pauseLevel--;
+            if (this.pauseLevel === 0) {
+                this.checkForm();
+                this.listenForChanges();
+            }
         },
 
         initForDraft: function() {
@@ -466,7 +490,8 @@ Craft.DraftEditor = Garnish.Base.extend(
             // If this isn't a draft and there's no active preview, then there's nothing to check
             if (
                 this.settings.revisionId ||
-                (!this.settings.draftId && !this.isPreviewActive())
+                (!this.settings.draftId && !this.isPreviewActive()) ||
+                this.pauseLevel > 0
             ) {
                 return;
             }
@@ -646,7 +671,11 @@ Craft.DraftEditor = Garnish.Base.extend(
                         this.checkMetaValues();
                     }
 
-                    $.extend(this.duplicatedElements, response.duplicatedElements);
+                    for (let oldId in response.duplicatedElements) {
+                        if (oldId != this.settings.sourceId && response.duplicatedElements.hasOwnProperty(oldId)) {
+                            this.duplicatedElements[oldId] = response.duplicatedElements[oldId];
+                        }
+                    }
 
                     resolve();
                 }.bind(this));
@@ -671,20 +700,19 @@ Craft.DraftEditor = Garnish.Base.extend(
         },
 
         swapDuplicatedElementIds: function(data) {
-            for (var oldId in this.duplicatedElements) {
-                if (this.duplicatedElements.hasOwnProperty(oldId)) {
-                    data = data
-                        .replace(
-                            new RegExp(Craft.escapeRegex(encodeURIComponent('][' + oldId + ']')), 'g'),
-                            '][' + this.duplicatedElements[oldId] + ']'
-                        )
-                        .replace(
-                            new RegExp('=' + oldId + '\\b', 'g'),
-                            '=' + this.duplicatedElements[oldId]
-                        );
-                }
+            let idsRE = Object.keys(this.duplicatedElements).join('|');
+            if (idsRE === '') {
+                return data;
             }
-            return data;
+            let lb = encodeURIComponent('[');
+            let rb = encodeURIComponent(']');
+            return data
+                .replace(new RegExp(`(&fields${lb}[^=]+${rb}${lb})(${idsRE})(${rb})`, 'g'), (m, pre, id, post) => {
+                    return pre + this.duplicatedElements[id] + post;
+                })
+                .replace(new RegExp(`(&fields${lb}[^=]+=)(${idsRE})\\b`, 'g'), (m, pre, id) => {
+                    return pre + this.duplicatedElements[id];
+                });
         },
 
         getDeltaNames: function() {
@@ -714,6 +742,7 @@ Craft.DraftEditor = Garnish.Base.extend(
 
         afterUpdate: function(data) {
             Craft.cp.$primaryForm.data('initialSerializedValue', data);
+            Craft.initialDeltaValues = {};
             this.statusIcons()
                 .removeClass('hidden')
                 .addClass('checkmark-icon')

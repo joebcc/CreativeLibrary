@@ -130,7 +130,7 @@ class EntriesController extends BaseEntriesController
                 ->descendantOf($entry)
                 ->anyStatus()
                 ->ids();
-            $excludeIds[] = $entry->id;
+            $excludeIds[] = $entry->getSourceId();
 
             $variables['parentOptionCriteria'] = [
                 'siteId' => $site->id,
@@ -434,19 +434,19 @@ class EntriesController extends BaseEntriesController
      * Deletes an entry.
      *
      * @return Response|null
-     * @throws NotFoundHttpException if the requested entry cannot be found
+     * @throws BadRequestHttpException if the requested entry cannot be found
      */
     public function actionDeleteEntry()
     {
         $this->requirePostRequest();
 
         $request = Craft::$app->getRequest();
-        $entryId = $request->getRequiredBodyParam('entryId');
+        $entryId = $request->getBodyParam('sourceId') ?? $request->getRequiredBodyParam('entryId');
         $siteId = $request->getBodyParam('siteId');
         $entry = Craft::$app->getEntries()->getEntryById($entryId, $siteId);
 
         if (!$entry) {
-            throw new NotFoundHttpException('Entry not found');
+            throw new BadRequestHttpException("Invalid entry ID: $entryId");
         }
 
         $currentUser = Craft::$app->getUser()->getIdentity();
@@ -537,32 +537,24 @@ class EntriesController extends BaseEntriesController
                 throw new BadRequestHttpException('Request missing required entryId param');
             }
 
-            // Get the structure ID
-            $structureId = (new Query())
-                ->select(['sections.structureId'])
-                ->from(['{{%entries}} entries'])
-                ->innerJoin('{{%sections}} sections', '[[sections.id]] = [[entries.sectionId]]')
-                ->where(['entries.id' => $variables['entryId']])
-                ->scalar();
-
             if (!empty($variables['draftId'])) {
                 $variables['entry'] = Entry::find()
                     ->draftId($variables['draftId'])
-                    ->structureId($structureId)
+                    ->structureId($variables['section']->structureId)
                     ->siteId($site->id)
                     ->anyStatus()
                     ->one();
             } else if (!empty($variables['revisionId'])) {
                 $variables['entry'] = Entry::find()
                     ->revisionId($variables['revisionId'])
-                    ->structureId($structureId)
+                    ->structureId($variables['section']->structureId)
                     ->siteId($site->id)
                     ->anyStatus()
                     ->one();
             } else {
                 $variables['entry'] = Entry::find()
                     ->id($variables['entryId'])
-                    ->structureId($structureId)
+                    ->structureId($variables['section']->structureId)
                     ->siteId($site->id)
                     ->anyStatus()
                     ->one();
@@ -653,7 +645,7 @@ class EntriesController extends BaseEntriesController
     private function _getEntryModel(): Entry
     {
         $request = Craft::$app->getRequest();
-        $entryId = $request->getBodyParam('entryId');
+        $entryId = $request->getBodyParam('draftId') ?? $request->getBodyParam('sourceId') ?? $request->getBodyParam('entryId');
         $siteId = $request->getBodyParam('siteId');
 
         if ($entryId) {

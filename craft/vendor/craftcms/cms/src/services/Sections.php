@@ -14,6 +14,7 @@ use craft\db\Query;
 use craft\db\Table;
 use craft\elements\Entry;
 use craft\errors\EntryTypeNotFoundException;
+use craft\errors\InvalidElementException;
 use craft\errors\SectionNotFoundException;
 use craft\events\ConfigEvent;
 use craft\events\DeleteSiteEvent;
@@ -226,6 +227,10 @@ class Sections extends Component
      */
     public function getEditableSections(): array
     {
+        if (Craft::$app->getRequest()->getIsConsoleRequest()) {
+            return $this->getAllSections();
+        }
+
         $userSession = Craft::$app->getUser();
         return ArrayHelper::where($this->getAllSections(), function(Section $section) use ($userSession) {
             return $userSession->checkPermission('editEntries:' . $section->uid);
@@ -560,10 +565,9 @@ class Sections extends Component
                     foreach ($this->getEntryTypesBySectionId($section->id) as $entryType) {
                         if ($entryType->id == $entry->typeId) {
                             // This is *the* entry's type. Make sure its name & handle match the section's
-                            if (
-                                ($entryType->name !== ($entryType->name = $section->name)) ||
-                                ($entryType->handle !== ($entryType->handle = $section->handle))
-                            ) {
+                            if ($entryType->name !== $section->name || $entryType->handle !== $section->handle) {
+                                $entryType->name = $section->name;
+                                $entryType->handle = $section->handle;
                                 $this->saveEntryType($entryType);
                             }
 
@@ -662,6 +666,7 @@ class Sections extends Component
             }
 
             $siteIdMap = Db::idsByUids(Table::SITES, array_keys($siteSettingData));
+            $hasNewSite = false;
 
             foreach ($siteSettingData as $siteUid => $siteSettings) {
                 $siteId = $siteIdMap[$siteUid];
@@ -674,6 +679,7 @@ class Sections extends Component
                     $siteSettingsRecord->sectionId = $sectionRecord->id;
                     $siteSettingsRecord->siteId = $siteId;
                     $resaveEntries = true;
+                    $hasNewSite = true;
                 }
 
                 $siteSettingsRecord->enabledByDefault = $siteSettings['enabledByDefault'];
@@ -735,6 +741,7 @@ class Sections extends Component
                         'elementType' => Entry::class,
                         'criteria' => [
                             'sectionId' => $sectionRecord->id,
+                            'structureId' => $sectionRecord->structureId,
                         ],
                     ]));
                 } else if ($this->autoResaveEntries) {
@@ -750,6 +757,7 @@ class Sections extends Component
                             'status' => null,
                             'enabledForSite' => false,
                         ],
+                        'updateSearchIndex' => $hasNewSite,
                     ]));
                 }
             }
@@ -1541,7 +1549,7 @@ class Sections extends Component
             throw new Exception('No entry types exist for section ' . $section->id);
         }
 
-        // Get/save the entry
+        // Get/save the entry with updated title, slug, and URI format
         // ---------------------------------------------------------------------
 
         // If there are any existing entries, find the first one with a valid typeId
@@ -1561,10 +1569,21 @@ class Sections extends Component
             $entry->title = $section->name;
         }
 
-        // (Re)save it with an updated title, slug, and URI format.
+        // Validate first
         $entry->setScenario(Element::SCENARIO_ESSENTIALS);
-        if (!Craft::$app->getElements()->saveElement($entry)) {
-            throw new Exception('Couldn’t save single entry due to validation errors on the slug and/or URI: ' . $section->name);
+        $entry->validate();
+
+        // If there are any errors on the URI, re-validate as disabled
+        if ($entry->hasErrors('uri') && $entry->enabled) {
+            $entry->enabled = false;
+            $entry->validate();
+        }
+
+        if (
+            $entry->hasErrors() ||
+            !Craft::$app->getElements()->saveElement($entry, false)
+        ) {
+            throw new Exception("Couldn’t save single entry for section $section->name due to validation errors: " . implode(', ', $entry->getFirstErrors()));
         }
 
         // Delete any other entries in the section
@@ -1607,7 +1626,7 @@ class Sections extends Component
 
         /** @var Entry $entry */
         foreach ($query->each() as $entry) {
-            $structuresService->appendToRoot($sectionRecord->structureId, $entry, 'insert');
+            $structuresService->appendToRoot($sectionRecord->structureId, $entry, Structures::MODE_INSERT);
         }
     }
 

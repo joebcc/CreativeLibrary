@@ -1,21 +1,41 @@
 "use strict";
 
-function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _nonIterableSpread(); }
+function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest(); }
 
-function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance"); }
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
 
-function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
+function _iterableToArrayLimit(arr, i) { if (typeof Symbol === "undefined" || !(Symbol.iterator in Object(arr))) return; var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"] != null) _i["return"](); } finally { if (_d) throw _e; } } return _arr; }
 
-function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } }
+function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+
+function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread(); }
+
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _iterableToArray(iter) { if (typeof Symbol !== "undefined" && Symbol.iterator in Object(iter)) return Array.from(iter); }
+
+function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) return _arrayLikeToArray(arr); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
 
 function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof = function _typeof(obj) { return typeof obj; }; } else { _typeof = function _typeof(obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof(obj); }
 
-/*!   - 2020-04-20 */
+/*!   - 2020-07-17 */
 (function ($) {
   /** global: Craft */
 
   /** global: Garnish */
-  // Set all the standard Craft.* stuff
+  // Use old jQuery prefilter behavior
+  // see https://jquery.com/upgrade-guide/3.5/
+  var rxhtmlTag = /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([a-z][^\/\0>\x20\t\r\n\f]*)[^>]*)\/>/gi;
+
+  jQuery.htmlPrefilter = function (html) {
+    return html.replace(rxhtmlTag, "<$1></$2>");
+  }; // Set all the standard Craft.* stuff
+
+
   $.extend(Craft, {
     navHeight: 48,
 
@@ -687,20 +707,28 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
             resolve(apiResponse.data);
 
             if (!_this3._processedApiHeaders) {
-              _this3._processedApiHeaders = true;
+              if (apiResponse.headers['x-craft-license-status']) {
+                _this3._processedApiHeaders = true;
 
-              _this3.sendActionRequest('POST', 'app/process-api-response-headers', {
-                data: {
-                  headers: apiResponse.headers
-                },
-                cancelToken: cancelToken
-              }); // If we just got a new license key, set it and then resolve the header waitlist
+                _this3.sendActionRequest('POST', 'app/process-api-response-headers', {
+                  data: {
+                    headers: apiResponse.headers
+                  },
+                  cancelToken: cancelToken
+                }); // If we just got a new license key, set it and then resolve the header waitlist
 
 
-              if (_this3._apiHeaders && _this3._apiHeaders['X-Craft-License'] === '__REQUEST__') {
-                _this3._apiHeaders['X-Craft-License'] = apiResponse.headers['x-craft-license'];
+                if (_this3._apiHeaders && _this3._apiHeaders['X-Craft-License'] === '__REQUEST__') {
+                  _this3._apiHeaders['X-Craft-License'] = window.cmsLicenseKey = apiResponse.headers['x-craft-license'];
 
-                _this3._resolveHeaderWaitlist();
+                  _this3._resolveHeaderWaitlist();
+                }
+              } else if (_this3._apiHeaders && _this3._apiHeaders['X-Craft-License'] === '__REQUEST__' && _this3._apiHeaderWaitlist.length) {
+                // The request didn't send headers. Go ahead and resolve the next request on the
+                // header waitlist.
+                var item = _this3._apiHeaderWaitlist.shift();
+
+                item[0](_this3._apiHeaders);
               }
             }
           })["catch"](reject);
@@ -756,10 +784,8 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
           _this4._loadingApiHeaders = false;
           reject(e); // Was anything else waiting for them?
 
-          var item;
-
-          while (item = _this4._apiHeaderWaitlist.shift()) {
-            item[1](e);
+          while (_this4._apiHeaderWaitlist.length) {
+            _this4._apiHeaderWaitlist.shift()[1](e);
           }
         });
       });
@@ -767,10 +793,8 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
     _resolveHeaderWaitlist: function _resolveHeaderWaitlist() {
       this._loadingApiHeaders = false; // Was anything else waiting for them?
 
-      var item;
-
-      while (item = this._apiHeaderWaitlist.shift()) {
-        item[0](this._apiHeaders);
+      while (this._apiHeaderWaitlist.length) {
+        this._apiHeaderWaitlist.shift()[0](this._apiHeaders);
       }
     },
 
@@ -782,8 +806,8 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       this._processedApiHeaders = false;
       this._loadingApiHeaders = false; // Reject anything in the header waitlist
 
-      while (item = this._apiHeaderWaitlist.shift()) {
-        item[1]();
+      while (this._apiHeaderWaitlist.length) {
+        this._apiHeaderWaitlist.shift()[1]();
       }
     },
 
@@ -1496,6 +1520,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       $('.pill', $container).pill();
       $('.formsubmit', $container).formsubmit();
       $('.menubtn', $container).menubtn();
+      $('.datetimewrapper', $container).datetime();
     },
     _elementIndexClasses: {},
     _elementSelectorModalClasses: {},
@@ -1932,7 +1957,46 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
           new Garnish.MenuBtn($btn, settings);
         }
       });
-    }
+    },
+    datetime: function datetime() {
+      return this.each(function () {
+        var $wrapper = $(this);
+        var $inputs = $wrapper.find('input:not([name$="[timezone]"])');
+
+        var checkValue = function checkValue() {
+          var hasValue = false;
+
+          for (var _i3 = 0; _i3 < $inputs.length; _i3++) {
+            if ($inputs.eq(_i3).val()) {
+              hasValue = true;
+              break;
+            }
+          }
+
+          if (hasValue) {
+            if (!$wrapper.children('.clear-btn').length) {
+              var $btn = $('<div/>', {
+                "class": 'clear-btn',
+                role: 'button',
+                title: Craft.t('app', 'Clear')
+              }).appendTo($wrapper).on('click', function () {
+                for (var _i4 = 0; _i4 < $inputs.length; _i4++) {
+                  $inputs.eq(_i4).val('');
+                }
+
+                $btn.remove();
+              });
+            }
+          } else {
+            $wrapper.children('.clear-btn').remove();
+          }
+        };
+
+        $inputs.on('change', checkValue);
+        checkValue();
+      });
+    },
+    checkDatetimeValue: function checkDatetimeValue() {}
   });
   Garnish.$doc.ready(function () {
     Craft.initUiElements();
@@ -2049,7 +2113,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
         this.$form = $('<div/>');
         this.$fieldsContainer = $('<div class="fields"/>').appendTo(this.$form);
-        this.updateForm(response);
+        this.updateForm(response, true);
         this.onCreateForm(this.$form);
         var $footer = $('<div class="hud-footer"/>').appendTo(this.$form),
             $buttonsContainer = $('<div class="buttons right"/>').appendTo($footer);
@@ -2110,7 +2174,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       data = $.extend(this.getBaseData(), data);
       Craft.postActionRequest('elements/get-editor-html', data, $.proxy(function (response, textStatus) {
         if (textStatus === 'success') {
-          this.updateForm(response);
+          this.updateForm(response, true);
         }
 
         if (callback) {
@@ -2118,10 +2182,14 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
         }
       }, this));
     },
-    updateForm: function updateForm(response) {
+    updateForm: function updateForm(response, refreshInitialData) {
       this.siteId = response.siteId;
-      this.deltaNames = response.deltaNames;
-      this.$fieldsContainer.html(response.html); // Swap any instruction text with info icons
+      this.$fieldsContainer.html(response.html);
+
+      if (refreshInitialData !== false) {
+        this.deltaNames = response.deltaNames;
+      } // Swap any instruction text with info icons
+
 
       var $instructions = this.$fieldsContainer.find('> .meta > .field > .heading > .instructions');
 
@@ -2136,7 +2204,10 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
         Craft.appendHeadHtml(response.headHtml);
         Craft.appendFootHtml(response.footHtml);
         Craft.initUiElements(this.$fieldsContainer);
-        this.initialData = this.hud.$body.serialize();
+
+        if (refreshInitialData) {
+          this.initialData = this.hud.$body.serialize();
+        }
       }, this));
     },
     saveElement: function saveElement() {
@@ -2180,7 +2251,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
             this.closeHud();
             this.onSaveElement(response);
           } else {
-            this.updateForm(response);
+            this.updateForm(response, false);
             Garnish.shake(this.hud.$hud);
           }
         }
@@ -3560,8 +3631,11 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       }
 
       if (this.initialized) {
-        // Remember this site for later
-        Craft.setLocalStorage('BaseElementIndex.siteId', siteId); // Update the elements
+        if (this.settings.context === 'index') {
+          // Remember this site for later
+          Craft.setLocalStorage('BaseElementIndex.siteId', siteId);
+        } // Update the elements
+
 
         this.updateElements();
       }
@@ -4219,8 +4293,13 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       return this.elementSelect.$selectedItems;
     },
     getSelectedElementIds: function getSelectedElementIds() {
-      var $selectedElements = this.getSelectedElements(),
-          ids = [];
+      var $selectedElements;
+
+      try {
+        $selectedElements = this.getSelectedElements();
+      } catch (e) {}
+
+      var ids = [];
 
       if ($selectedElements) {
         for (var i = 0; i < $selectedElements.length; i++) {
@@ -4659,9 +4738,20 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
       if (this.settings.viewMode === 'list' || this.$elements.length === 0) {
         animateCss['margin-bottom'] = -($element.outerHeight() + parseInt($element.css('margin-bottom')));
+      } // Pause the draft editor
+
+
+      if (window.draftEditor) {
+        window.draftEditor.pause();
       }
 
-      $element.velocity(animateCss, Craft.BaseElementSelectInput.REMOVE_FX_DURATION, callback);
+      $element.velocity(animateCss, Craft.BaseElementSelectInput.REMOVE_FX_DURATION, function () {
+        callback(); // Resume the draft editor
+
+        if (window.draftEditor) {
+          window.draftEditor.resume();
+        }
+      });
     },
     showModal: function showModal() {
       // Make sure we haven't reached the limit
@@ -4702,8 +4792,12 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
     getDisabledElementIds: function getDisabledElementIds() {
       var ids = this.getSelectedElementIds();
 
-      if (this.settings.sourceElementId) {
+      if (!this.settings.allowSelfRelations && this.settings.sourceElementId) {
         ids.push(this.settings.sourceElementId);
+      }
+
+      if (this.settings.disabledElementIds) {
+        ids.push.apply(ids, _toConsumableArray(this.settings.disabledElementIds));
       }
 
       return ids;
@@ -4722,12 +4816,14 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       this.updateDisabledElementsInModal();
     },
     selectElements: function selectElements(elements) {
-      for (var i = 0; i < elements.length; i++) {
-        var elementInfo = elements[i],
+      for (var _i5 = 0; _i5 < elements.length; _i5++) {
+        var elementInfo = elements[_i5],
             $element = this.createNewElement(elementInfo);
         this.appendElement($element);
         this.addElements($element);
-        this.animateElementIntoPlace(elementInfo.$element, $element);
+        this.animateElementIntoPlace(elementInfo.$element, $element); // Override the element reference with the new one
+
+        elementInfo.$element = $element;
       }
 
       this.onSelectElements(elements);
@@ -4801,7 +4897,9 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       elementType: null,
       sources: null,
       criteria: {},
+      allowSelfRelations: false,
       sourceElementId: null,
+      disabledElementIds: null,
       viewMode: 'list',
       limit: null,
       showSiteMenu: false,
@@ -5332,8 +5430,8 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
   Craft.AssetEditor = Craft.BaseElementEditor.extend({
     reloadIndex: false,
-    updateForm: function updateForm(response) {
-      this.base(response);
+    updateForm: function updateForm(response, refreshInitialData) {
+      this.base(response, refreshInitialData);
 
       if (this.$element.data('id')) {
         var $imageEditorTrigger = this.$fieldsContainer.find('> .meta > .preview-thumb-container.editable');
@@ -11136,7 +11234,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       }
 
       this.$colorContainer.removeClass('static');
-      this.$colorInput = $(input).addClass('hidden').insertAfter(this.$input);
+      this.$colorInput = $(input).addClass('color-preview-input').appendTo(this.$colorPreview);
       this.addListener(this.$colorContainer, 'click', function () {
         this.$colorInput.trigger('click');
       });
@@ -12776,6 +12874,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
     $saveMetaBtn: null,
     lastSerializedValue: null,
     listeningForChanges: false,
+    pauseLevel: 0,
     timeout: null,
     saving: false,
     saveXhr: null,
@@ -12848,7 +12947,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       }
     },
     listenForChanges: function listenForChanges() {
-      if (this.listeningForChanges) {
+      if (this.listeningForChanges || this.pauseLevel > 0) {
         return;
       }
 
@@ -12868,9 +12967,31 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       });
     },
     stopListeningForChanges: function stopListeningForChanges() {
+      if (!this.listeningForChanges) {
+        return;
+      }
+
       this.removeListener(Garnish.$bod, 'keypress,keyup,change,focus,blur,click,mousedown,mouseup');
       clearTimeout(this.timeout);
       this.listeningForChanges = false;
+    },
+    pause: function pause() {
+      this.pauseLevel++;
+      this.stopListeningForChanges();
+    },
+    resume: function resume() {
+      if (this.pauseLevel === 0) {
+        throw 'Craft.DraftEditor::resume() should only be called after pause().';
+      } // Only actually resume operation if this has been called the same
+      // number of times that pause() was called
+
+
+      this.pauseLevel--;
+
+      if (this.pauseLevel === 0) {
+        this.checkForm();
+        this.listenForChanges();
+      }
     },
     initForDraft: function initForDraft() {
       // Create the edit draft button
@@ -13184,7 +13305,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
     },
     checkForm: function checkForm(force) {
       // If this isn't a draft and there's no active preview, then there's nothing to check
-      if (this.settings.revisionId || !this.settings.draftId && !this.isPreviewActive()) {
+      if (this.settings.revisionId || !this.settings.draftId && !this.isPreviewActive() || this.pauseLevel > 0) {
         return;
       }
 
@@ -13359,7 +13480,12 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
             this.checkMetaValues();
           }
 
-          $.extend(this.duplicatedElements, response.duplicatedElements);
+          for (var oldId in response.duplicatedElements) {
+            if (oldId != this.settings.sourceId && response.duplicatedElements.hasOwnProperty(oldId)) {
+              this.duplicatedElements[oldId] = response.duplicatedElements[oldId];
+            }
+          }
+
           resolve();
         }.bind(this));
       }.bind(this));
@@ -13377,13 +13503,21 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       return Craft.findDeltaData(initialData, data, this.getDeltaNames());
     },
     swapDuplicatedElementIds: function swapDuplicatedElementIds(data) {
-      for (var oldId in this.duplicatedElements) {
-        if (this.duplicatedElements.hasOwnProperty(oldId)) {
-          data = data.replace(new RegExp(Craft.escapeRegex(encodeURIComponent('][' + oldId + ']')), 'g'), '][' + this.duplicatedElements[oldId] + ']').replace(new RegExp('=' + oldId + '\\b', 'g'), '=' + this.duplicatedElements[oldId]);
-        }
+      var _this12 = this;
+
+      var idsRE = Object.keys(this.duplicatedElements).join('|');
+
+      if (idsRE === '') {
+        return data;
       }
 
-      return data;
+      var lb = encodeURIComponent('[');
+      var rb = encodeURIComponent(']');
+      return data.replace(new RegExp("(&fields".concat(lb, "[^=]+").concat(rb).concat(lb, ")(").concat(idsRE, ")(").concat(rb, ")"), 'g'), function (m, pre, id, post) {
+        return pre + _this12.duplicatedElements[id] + post;
+      }).replace(new RegExp("(&fields".concat(lb, "[^=]+=)(").concat(idsRE, ")\\b"), 'g'), function (m, pre, id) {
+        return pre + _this12.duplicatedElements[id];
+      });
     },
     getDeltaNames: function getDeltaNames() {
       var deltaNames = Craft.deltaNames.slice(0);
@@ -13414,6 +13548,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
     },
     afterUpdate: function afterUpdate(data) {
       Craft.cp.$primaryForm.data('initialSerializedValue', data);
+      Craft.initialDeltaValues = {};
       this.statusIcons().removeClass('hidden').addClass('checkmark-icon').attr('title', Craft.t('app', 'The draft has been saved.'));
       this.trigger('update');
       this.nextInQueue();
@@ -13830,6 +13965,27 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
         $(blurTd).trigger('blur');
         $input.trigger('focus');
       }
+    },
+    importData: function importData(data, row, tdIndex) {
+      var lines = data.split(/\r?\n|\r/);
+
+      for (var _i6 = 0; _i6 < lines.length; _i6++) {
+        var values = lines[_i6].split("\t");
+
+        for (var j = 0; j < values.length; j++) {
+          var value = values[j];
+          row.$tds.eq(tdIndex + j).find('textarea,input[type!=hidden]').val(value).trigger('input');
+        } // move onto the next row
+
+
+        var $nextTr = row.$tr.next('tr');
+
+        if ($nextTr.length) {
+          row = $nextTr.data('editable-table-row');
+        } else {
+          row = this.addRow(false);
+        }
+      }
     }
   }, {
     textualColTypes: ['color', 'date', 'email', 'multiline', 'number', 'singleline', 'template', 'time', 'url'],
@@ -14029,6 +14185,14 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
             type: col.type
           }, 'validateValue');
           $textarea.trigger('input');
+
+          if (col.type !== 'multiline') {
+            this.addListener($textarea, 'paste', {
+              tdIndex: i,
+              type: col.type
+            }, 'handlePaste');
+          }
+
           textareasByColId[colId] = $textarea;
         } else if (col.type === 'checkbox') {
           $checkbox = $('input[type="checkbox"]', td);
@@ -14170,6 +14334,16 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       if (ev.data.type === 'number' && !ctrl && !Craft.inArray(keyCode, Craft.EditableTable.Row.numericKeyCodes)) {
         ev.preventDefault();
       }
+    },
+    handlePaste: function handlePaste(ev) {
+      var data = Craft.trim(ev.originalEvent.clipboardData.getData('Text'), ' \n\r');
+
+      if (!data.match(/[\t\r\n]/)) {
+        return;
+      }
+
+      ev.preventDefault();
+      this.table.importData(data, this, ev.data.tdIndex);
     },
     validateValue: function validateValue(ev) {
       if (ev.data.type === 'multiline') {
@@ -14345,16 +14519,61 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       }
     },
     load: function load($elements) {
-      this.queue = this.queue.concat($elements.find('.elementthumb').toArray());
+      var _this13 = this;
 
-      if (this.queue.length) {
-        // See if there are any inactive workers
-        for (var i = 0; i < this.workers.length; i++) {
-          if (!this.workers[i].active) {
-            this.workers[i].loadNext();
-          }
+      // Only immediately load the visible images
+      var $thumbs = $elements.find('.elementthumb');
+
+      var _loop = function _loop(_i7) {
+        var $thumb = $thumbs.eq(_i7);
+        var $scrollParent = $thumb.scrollParent();
+
+        if (_this13.isVisible($thumb, $scrollParent)) {
+          _this13.addToQueue($thumb[0]);
+        } else {
+          var key = 'thumb' + Math.floor(Math.random() * 1000000);
+          Craft.ElementThumbLoader.invisibleThumbs[key] = [_this13, $thumb, $scrollParent];
+          $scrollParent.on("scroll.".concat(key), {
+            $thumb: $thumb,
+            $scrollParent: $scrollParent,
+            key: key
+          }, function (ev) {
+            if (_this13.isVisible(ev.data.$thumb, ev.data.$scrollParent)) {
+              delete Craft.ElementThumbLoader.invisibleThumbs[ev.data.key];
+              $scrollParent.off("scroll.".concat(ev.data.key));
+
+              _this13.addToQueue(ev.data.$thumb[0]);
+            }
+          });
+        }
+      };
+
+      for (var _i7 = 0; _i7 < $thumbs.length; _i7++) {
+        _loop(_i7);
+      }
+    },
+    addToQueue: function addToQueue(thumb) {
+      this.queue.push(thumb); // See if there are any inactive workers
+
+      for (var i = 0; i < this.workers.length; i++) {
+        if (!this.workers[i].active) {
+          this.workers[i].loadNext();
         }
       }
+    },
+    isVisible: function isVisible($thumb, $scrollParent) {
+      var thumbOffset = $thumb.offset().top;
+      var scrollParentOffset, scrollParentHeight;
+
+      if ($scrollParent[0] === document) {
+        scrollParentOffset = $scrollParent.scrollTop();
+        scrollParentHeight = Garnish.$win.height();
+      } else {
+        scrollParentOffset = $scrollParent.offset().top;
+        scrollParentHeight = $scrollParent.height();
+      }
+
+      return thumbOffset > scrollParentOffset && thumbOffset < scrollParentOffset + scrollParentHeight + 1000;
     },
     destroy: function destroy() {
       for (var i = 0; i < this.workers.length; i++) {
@@ -14362,6 +14581,20 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       }
 
       this.base();
+    }
+  }, {
+    invisibleThumbs: {},
+    retryAll: function retryAll() {
+      for (var key in Craft.ElementThumbLoader.invisibleThumbs) {
+        var _Craft$ElementThumbLo = _slicedToArray(Craft.ElementThumbLoader.invisibleThumbs[key], 3),
+            queue = _Craft$ElementThumbLo[0],
+            $thumb = _Craft$ElementThumbLo[1],
+            $scrollParent = _Craft$ElementThumbLo[2];
+
+        delete Craft.ElementThumbLoader.invisibleThumbs[key];
+        $scrollParent.off("scroll.".concat(key));
+        queue.load($thumb.parent());
+      }
     }
   });
   Craft.ElementThumbLoader.Worker = Garnish.Base.extend({
@@ -14391,7 +14624,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
         srcset: $container.attr('data-srcset'),
         alt: ''
       });
-      this.addListener($img, 'load', 'loadNext');
+      this.addListener($img, 'load,error', 'loadNext');
       $img.appendTo($container);
       picturefill({
         elements: [$img[0]]
@@ -16228,7 +16461,10 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       this.$icon = $(icon);
       this.addListener(this.$icon, 'click', 'showHud');
     },
-    showHud: function showHud() {
+    showHud: function showHud(ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+
       if (!this.hud) {
         this.hud = new Garnish.HUD(this.$icon, this.$icon.html(), {
           hudClass: 'hud info-hud',
@@ -16576,11 +16812,11 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
         this.$shade = $('<div/>', {
           'class': 'modal-shade dark'
         }).appendTo(Garnish.$bod);
-        this.$editorContainer = $('<div/>', {
-          'class': 'lp-editor-container'
-        }).appendTo(Garnish.$bod);
         this.$iframeContainer = $('<div/>', {
           'class': 'lp-preview-container'
+        }).appendTo(Garnish.$bod);
+        this.$editorContainer = $('<div/>', {
+          'class': 'lp-editor-container'
         }).appendTo(Garnish.$bod);
         var $editorHeader = $('<header/>', {
           'class': 'flex'
@@ -16612,7 +16848,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
       this.handleWindowResize();
       this.addListener(Garnish.$win, 'resize', 'handleWindowResize');
-      this.$editorContainer.css(Craft.left, -(this.editorWidthInPx + Craft.LivePreview.dragHandleWidth) + 'px');
+      this.$editorContainer.css(Craft.left, -this.editorWidthInPx + 'px');
       this.$iframeContainer.css(Craft.right, -this.getIframeWidth()); // Move all the fields into the editor rather than copying them
       // so any JS that's referencing the elements won't break.
 
@@ -16643,6 +16879,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
       Garnish.on(Craft.BaseElementEditor, 'saveElement', this._forceUpdateIframeProxy);
       Garnish.on(Craft.AssetImageEditor, 'save', this._forceUpdateIframeProxy);
+      Craft.ElementThumbLoader.retryAll();
       this.inPreviewMode = true;
       this.trigger('enter');
     },
@@ -16697,7 +16934,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
       this.moveFieldsBack();
       this.$shade.delay(200).velocity('fadeOut');
-      this.$editorContainer.velocity('stop').animateLeft(-(this.editorWidthInPx + Craft.LivePreview.dragHandleWidth), 'slow', $.proxy(function () {
+      this.$editorContainer.velocity('stop').animateLeft(-this.editorWidthInPx, 'slow', $.proxy(function () {
         for (var i = 0; i < this.fields.length; i++) {
           this.fields[i].$newClone.remove();
         }
@@ -16709,6 +16946,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
         this.$iframeContainer.hide();
       }, this));
       Garnish.off(Craft.BaseElementEditor, 'saveElement', this._forceUpdateIframeProxy);
+      Craft.ElementThumbLoader.retryAll();
       this.inPreviewMode = false;
       this.trigger('exit');
     },
@@ -16727,7 +16965,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       Garnish.$win.trigger('resize');
     },
     getIframeWidth: function getIframeWidth() {
-      return Garnish.$win.width() - (this.editorWidthInPx + Craft.LivePreview.dragHandleWidth);
+      return Garnish.$win.width() - this.editorWidthInPx;
     },
     updateWidths: function updateWidths() {
       this.$editorContainer.css('width', this.editorWidthInPx + 'px');
@@ -16850,7 +17088,6 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
   }, {
     defaultEditorWidth: 0.33,
     minEditorWidthInPx: 320,
-    dragHandleWidth: 4,
     defaults: {
       trigger: '.livepreviewbtn',
       fields: null,
@@ -17012,6 +17249,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
     $tempInput: null,
     $fieldPlaceholder: null,
     isActive: false,
+    isVisible: false,
     activeTarget: 0,
     draftId: null,
     url: null,
@@ -17020,7 +17258,6 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
     scrollTop: null,
     dragger: null,
     dragStartEditorWidth: null,
-    _slideInOnIframeLoad: false,
     _updateIframeProxy: null,
     _editorWidth: null,
     _editorWidthInPx: null,
@@ -17078,11 +17315,11 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
         this.$shade = $('<div/>', {
           'class': 'modal-shade dark'
         }).appendTo(Garnish.$bod);
-        this.$editorContainer = $('<div/>', {
-          'class': 'lp-editor-container'
-        }).appendTo(Garnish.$bod);
         this.$previewContainer = $('<div/>', {
           'class': 'lp-preview-container'
+        }).appendTo(Garnish.$bod);
+        this.$editorContainer = $('<div/>', {
+          'class': 'lp-editor-container'
         }).appendTo(Garnish.$bod);
         var $editorHeader = $('<header/>', {
           'class': 'flex'
@@ -17158,7 +17395,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
       this.handleWindowResize();
       this.addListener(Garnish.$win, 'resize', 'handleWindowResize');
-      this.$editorContainer.css(Craft.left, -(this.editorWidthInPx + Craft.Preview.dragHandleWidth) + 'px');
+      this.$editorContainer.css(Craft.left, -this.editorWidthInPx + 'px');
       this.$previewContainer.css(Craft.right, -this.getIframeWidth()); // Find the fields, excluding nested fields
 
       this.fields = [];
@@ -17186,11 +17423,11 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
         }
       }
 
-      this._slideInOnIframeLoad = true;
       this.updateIframe();
       this.draftEditor.on('update', this._updateIframeProxy);
       Garnish.on(Craft.BaseElementEditor, 'saveElement', this._updateIframeProxy);
       Garnish.on(Craft.AssetImageEditor, 'save', this._updateIframeProxy);
+      Craft.ElementThumbLoader.retryAll();
       this.trigger('open');
     },
     switchTarget: function switchTarget(i) {
@@ -17210,6 +17447,10 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       this.updateWidths();
     },
     slideIn: function slideIn() {
+      if (!this.isActive || this.isVisible) {
+        return;
+      }
+
       $('html').addClass('noscroll');
       this.$shade.velocity('fadeIn');
       this.$editorContainer.show().velocity('stop').animateLeft(0, 'slow', $.proxy(function () {
@@ -17223,9 +17464,10 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
           }
         });
       }, this));
+      this.isVisible = true;
     },
     close: function close() {
-      if (!this.isActive) {
+      if (!this.isActive || !this.isVisible) {
         return;
       }
 
@@ -17237,7 +17479,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       this.$tempInput.detach();
       this.moveFieldsBack();
       this.$shade.delay(200).velocity('fadeOut');
-      this.$editorContainer.velocity('stop').animateLeft(-(this.editorWidthInPx + Craft.Preview.dragHandleWidth), 'slow', $.proxy(function () {
+      this.$editorContainer.velocity('stop').animateLeft(-this.editorWidthInPx, 'slow', $.proxy(function () {
         for (var i = 0; i < this.fields.length; i++) {
           this.fields[i].$newClone.remove();
         }
@@ -17251,7 +17493,9 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       this.draftEditor.off('update', this._updateIframeProxy);
       Garnish.off(Craft.BaseElementEditor, 'saveElement', this._updateIframeProxy);
       Garnish.off(Craft.AssetImageEditor, 'save', this._updateIframeProxy);
+      Craft.ElementThumbLoader.retryAll();
       this.isActive = false;
+      this.isVisible = false;
       this.trigger('close');
     },
     moveFieldsBack: function moveFieldsBack() {
@@ -17269,7 +17513,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       Garnish.$win.trigger('resize');
     },
     getIframeWidth: function getIframeWidth() {
-      return Garnish.$win.width() - (this.editorWidthInPx + Craft.Preview.dragHandleWidth);
+      return Garnish.$win.width() - this.editorWidthInPx;
     },
     updateWidths: function updateWidths() {
       this.$editorContainer.css('width', this.editorWidthInPx + 'px');
@@ -17291,6 +17535,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
       }); // If this is an existing preview target, make sure it wants to be refreshed automatically
 
       if (!refresh) {
+        this.slideIn();
         return;
       }
 
@@ -17335,19 +17580,12 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
         this.url = url;
         this.$iframe = $iframe;
-        this.afterUpdateIframe();
-      }.bind(this));
-    },
-    afterUpdateIframe: function afterUpdateIframe() {
-      this.trigger('afterUpdateIframe', {
-        target: this.draftEditor.settings.previewTargets[this.activeTarget],
-        $iframe: this.$iframe
-      });
-
-      if (this._slideInOnIframeLoad) {
+        this.trigger('afterUpdateIframe', {
+          target: this.draftEditor.settings.previewTargets[this.activeTarget],
+          $iframe: this.$iframe
+        });
         this.slideIn();
-        this._slideInOnIframeLoad = false;
-      }
+      }.bind(this));
     },
     _getClone: function _getClone($field) {
       var $clone = $field.clone(); // clone() won't account for input values that have changed since the original HTML set them
@@ -17379,8 +17617,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
     }
   }, {
     defaultEditorWidth: 0.33,
-    minEditorWidthInPx: 320,
-    dragHandleWidth: 2
+    minEditorWidthInPx: 320
   });
   /** global: Craft */
 

@@ -31,6 +31,7 @@ use craft\models\EntryType;
 use craft\models\Section;
 use craft\models\Site;
 use craft\records\Entry as EntryRecord;
+use craft\services\Structures;
 use craft\validators\DateTimeValidator;
 use yii\base\Exception;
 use yii\base\InvalidConfigException;
@@ -972,11 +973,14 @@ class Entry extends Element
 
         // Cover the basics
         if (
-            $section->type === Section::TYPE_SINGLE ||
             !$userSession->checkPermission("editEntries:$section->uid") ||
             ($this->enabled && !$userSession->checkPermission("publishEntries:$section->uid"))
         ) {
             return false;
+        }
+
+        if ($section->type === Section::TYPE_SINGLE) {
+            return true;
         }
 
         // Is this a new entry?
@@ -1149,7 +1153,10 @@ EOD;
             // Set Craft to the entry's site's language, in case the title format has any static translations
             $language = Craft::$app->language;
             Craft::$app->language = $this->getSite()->language;
-            $this->title = Craft::$app->getView()->renderObjectTemplate($entryType->titleFormat, $this);
+            $title = Craft::$app->getView()->renderObjectTemplate($entryType->titleFormat, $this);
+            if ($title !== '') {
+                $this->title = $title;
+            }
             Craft::$app->language = $language;
         }
     }
@@ -1271,18 +1278,21 @@ EOD;
 
             $record->save(false);
 
-            if ($section->type == Section::TYPE_STRUCTURE) {
+            if (!$this->duplicateOf && $section->type == Section::TYPE_STRUCTURE) {
                 // Has the parent changed?
                 if ($this->_hasNewParent()) {
+                    $mode = $isNew ? Structures::MODE_INSERT : Structures::MODE_AUTO;
                     if (!$this->newParentId) {
-                        Craft::$app->getStructures()->appendToRoot($this->structureId, $this);
+                        Craft::$app->getStructures()->appendToRoot($this->structureId, $this, $mode);
                     } else {
-                        Craft::$app->getStructures()->append($this->structureId, $this, $this->getParent());
+                        Craft::$app->getStructures()->append($this->structureId, $this, $this->getParent(), $mode);
                     }
                 }
 
                 // Update the entry's descendants, who may be using this entry's URI in their own URIs
-                Craft::$app->getElements()->updateDescendantSlugsAndUris($this, true, true);
+                if (!$isNew) {
+                    Craft::$app->getElements()->updateDescendantSlugsAndUris($this, true, true);
+                }
             }
 
             $this->setDirtyAttributes($dirtyAttributes);

@@ -1,0 +1,12 @@
+volumes:
+  uploads:
+    attributes:
+      keyId: original_key_id
+      bucket: '%S3_BUCKET%'
+      secret: '%s3_secret_access_key%'
+users:
+  settings:
+    requireEmailVerification: true
+    allowPublicRegistration: false
+    defaultGroup: null
+    photoSubpath: profile

@@ -1,5 +1,14 @@
 /** global: Craft */
 /** global: Garnish */
+
+// Use old jQuery prefilter behavior
+// see https://jquery.com/upgrade-guide/3.5/
+var rxhtmlTag = /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([a-z][^\/\0>\x20\t\r\n\f]*)[^>]*)\/>/gi;
+jQuery.htmlPrefilter = function( html ) {
+    return html.replace( rxhtmlTag, "<$1></$2>" );
+};
+
+
 // Set all the standard Craft.* stuff
 $.extend(Craft,
     {
@@ -636,18 +645,29 @@ $.extend(Craft,
                         resolve(apiResponse.data);
 
                         if (!this._processedApiHeaders) {
-                            this._processedApiHeaders = true;
-                            this.sendActionRequest('POST', 'app/process-api-response-headers', {
-                                data: {
-                                    headers: apiResponse.headers,
-                                },
-                                cancelToken: cancelToken,
-                            });
+                            if (apiResponse.headers['x-craft-license-status']) {
+                                this._processedApiHeaders = true;
+                                this.sendActionRequest('POST', 'app/process-api-response-headers', {
+                                    data: {
+                                        headers: apiResponse.headers,
+                                    },
+                                    cancelToken: cancelToken,
+                                });
 
-                            // If we just got a new license key, set it and then resolve the header waitlist
-                            if (this._apiHeaders && this._apiHeaders['X-Craft-License'] === '__REQUEST__') {
-                                this._apiHeaders['X-Craft-License'] = apiResponse.headers['x-craft-license'];
-                                this._resolveHeaderWaitlist();
+                                // If we just got a new license key, set it and then resolve the header waitlist
+                                if (this._apiHeaders && this._apiHeaders['X-Craft-License'] === '__REQUEST__') {
+                                    this._apiHeaders['X-Craft-License'] = window.cmsLicenseKey = apiResponse.headers['x-craft-license'];
+                                    this._resolveHeaderWaitlist();
+                                }
+                            } else if (
+                                this._apiHeaders &&
+                                this._apiHeaders['X-Craft-License'] === '__REQUEST__' &&
+                                this._apiHeaderWaitlist.length
+                            ) {
+                                // The request didn't send headers. Go ahead and resolve the next request on the
+                                // header waitlist.
+                                let item = this._apiHeaderWaitlist.shift()
+                                item[0](this._apiHeaders);
                             }
                         }
                     }).catch(reject);
@@ -700,10 +720,10 @@ $.extend(Craft,
                 }).catch(e => {
                     this._loadingApiHeaders = false;
                     reject(e)
+
                     // Was anything else waiting for them?
-                    let item;
-                    while (item = this._apiHeaderWaitlist.shift()) {
-                        item[1](e);
+                    while (this._apiHeaderWaitlist.length) {
+                        this._apiHeaderWaitlist.shift()[1](e);
                     }
                 });
             });
@@ -711,10 +731,10 @@ $.extend(Craft,
 
         _resolveHeaderWaitlist: function() {
             this._loadingApiHeaders = false;
+
             // Was anything else waiting for them?
-            let item;
-            while (item = this._apiHeaderWaitlist.shift()) {
-                item[0](this._apiHeaders);
+            while (this._apiHeaderWaitlist.length) {
+                this._apiHeaderWaitlist.shift()[0](this._apiHeaders);
             }
         },
 
@@ -727,8 +747,8 @@ $.extend(Craft,
             this._loadingApiHeaders = false;
 
             // Reject anything in the header waitlist
-            while (item = this._apiHeaderWaitlist.shift()) {
-                item[1]();
+            while (this._apiHeaderWaitlist.length) {
+                this._apiHeaderWaitlist.shift()[1]();
             }
         },
 
@@ -1440,6 +1460,7 @@ $.extend(Craft,
             $('.pill', $container).pill();
             $('.formsubmit', $container).formsubmit();
             $('.menubtn', $container).menubtn();
+            $('.datetimewrapper', $container).datetime();
         },
 
         _elementIndexClasses: {},
@@ -1884,6 +1905,46 @@ $.extend($.fn,
                     new Garnish.MenuBtn($btn, settings);
                 }
             });
+        },
+
+        datetime: function() {
+            return this.each(function() {
+                let $wrapper = $(this);
+                let $inputs = $wrapper.find('input:not([name$="[timezone]"])');
+                let checkValue = () => {
+                    let hasValue = false;
+                    for (let i = 0; i < $inputs.length; i++) {
+                        if ($inputs.eq(i).val()) {
+                            hasValue = true;
+                            break;
+                        }
+                    }
+                    if (hasValue) {
+                        if (!$wrapper.children('.clear-btn').length) {
+                            let $btn = $('<div/>', {
+                                class: 'clear-btn',
+                                role: 'button',
+                                title: Craft.t('app', 'Clear'),
+                            })
+                                .appendTo($wrapper)
+                                .on('click', () => {
+                                    for (let i = 0; i < $inputs.length; i++) {
+                                        $inputs.eq(i).val('');
+                                    }
+                                    $btn.remove();
+                                })
+                        }
+                    } else {
+                        $wrapper.children('.clear-btn').remove();
+                    }
+                };
+                $inputs.on('change', checkValue);
+                checkValue();
+            });
+        },
+
+        checkDatetimeValue: function() {
+
         }
     });
 

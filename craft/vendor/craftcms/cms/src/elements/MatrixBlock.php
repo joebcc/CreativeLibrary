@@ -279,16 +279,13 @@ class MatrixBlock extends Element implements BlockElementInterface
         $blockType = Craft::$app->getMatrix()->getBlockTypeById($this->typeId);
 
         if (!$blockType) {
-            throw new InvalidConfigException('Invalid Matrix block ID: ' . $this->typeId);
+            throw new InvalidConfigException('Invalid Matrix block type ID: ' . $this->typeId);
         }
 
         return $blockType;
     }
 
-    /**
-     * @inheritdoc
-     * @throws InvalidConfigException
-     */
+    /** @inheritdoc */
     public function getOwner(): ElementInterface
     {
         if ($this->_owner === null) {

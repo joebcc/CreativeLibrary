@@ -32,6 +32,7 @@ use craft\errors\ElementNotFoundException;
 use craft\errors\InvalidElementException;
 use craft\errors\OperationAbortedException;
 use craft\errors\SiteNotFoundException;
+use craft\errors\UnsupportedSiteException;
 use craft\events\BatchElementActionEvent;
 use craft\events\DeleteElementEvent;
 use craft\events\ElementEvent;
@@ -128,7 +129,7 @@ class Elements extends Component
      * use craft\services\Elements;
      *
      * Craft::$app->elements->on(Elements::EVENT_BEFORE_SAVE_ELEMENT, function(ElementEvent $e) {
-     *     if (ElementHelper::isDraftOrRevision($e->element) {
+     *     if (ElementHelper::isDraftOrRevision($e->element)) {
      *         return;
      *     }
      *
@@ -150,7 +151,7 @@ class Elements extends Component
      * use craft\services\Elements;
      *
      * Craft::$app->elements->on(Elements::EVENT_AFTER_SAVE_ELEMENT, function(ElementEvent $e) {
-     *     if (ElementHelper::isDraftOrRevision($e->element) {
+     *     if (ElementHelper::isDraftOrRevision($e->element)) {
      *         return;
      *     }
      *
@@ -629,9 +630,9 @@ class Elements extends Component
      * Propagates all elements that match a given element query to another site(s).
      *
      * @param ElementQueryInterface $query The element query to fetch elements with
+     * @param int|int[]|null $siteIds The site ID(s) that the elements should be propagated to. If null, elements will be
      * @param bool $continueOnError Whether to continue going if an error occurs
      * @throws \Throwable if reasons
-     * @var int|int[]|null The site ID(s) that the elements should be propagated to. If null, elements will be
      * propagated to all supported sites, except the one they were queried in.
      * @since 3.2.0
      */
@@ -723,6 +724,7 @@ class Elements extends Component
      * @param ElementInterface $element the element to duplicate
      * @param array $newAttributes any attributes to apply to the duplicate
      * @return ElementInterface the duplicated element
+     * @throws UnsupportedSiteException if the element is being duplicated into a site it doesn’t support
      * @throws InvalidElementException if saveElement() returns false for any of the sites
      * @throws \Throwable if reasons
      */
@@ -741,6 +743,10 @@ class Elements extends Component
         $mainClone->id = null;
         $mainClone->uid = null;
         $mainClone->contentId = null;
+        $mainClone->root = null;
+        $mainClone->lft = null;
+        $mainClone->rgt = null;
+        $mainClone->level = null;
         $mainClone->dateCreated = null;
         $mainClone->duplicateOf = $element;
 
@@ -760,7 +766,7 @@ class Elements extends Component
         $supportedSites = ElementHelper::supportedSitesForElement($mainClone);
         $supportedSiteIds = ArrayHelper::getColumn($supportedSites, 'siteId');
         if (!in_array($mainClone->siteId, $supportedSiteIds, false)) {
-            throw new Exception('Attempting to duplicate an element in an unsupported site.');
+            throw new UnsupportedSiteException($element, $mainClone->siteId, 'Attempting to duplicate an element in an unsupported site.');
         }
 
         // Validate
@@ -782,6 +788,44 @@ class Elements extends Component
             // Start with $element's site
             if (!$this->_saveElementInternal($mainClone, false, false)) {
                 throw new InvalidElementException($mainClone, 'Element ' . $element->id . ' could not be duplicated for site ' . $element->siteId);
+            }
+
+            // Should we add the clone to the source element's structure?
+            if (
+                $element->structureId &&
+                $element->root &&
+                !$mainClone->root &&
+                $mainClone->structureId == $element->structureId
+            ) {
+                $mode = isset($newAttributes['id']) ? Structures::MODE_AUTO : Structures::MODE_INSERT;
+
+                // If this is a root level element, insert the duplicate after the source
+                if ($element->level == 1) {
+                    Craft::$app->getStructures()->moveAfter($element->structureId, $mainClone, $element, $mode);
+                } else {
+                    // Append the clone to the source's parent
+                    // (we can't use getParent() here because there's a chance that the parent doesn't exist in the same
+                    // site as the source element anymore, if this is coming from an ApplyNewPropagationMethod job)
+                    $parentId = $element
+                        ->getAncestors(1)
+                        ->select(['elements.id'])
+                        ->siteId('*')
+                        ->unique()
+                        ->anyStatus()
+                        ->scalar();
+
+                    if ($parentId !== false) {
+                        // If we've cloned the parent, use the clone's ID instead
+                        if (isset(static::$duplicatedElementIds[$parentId])) {
+                            $parentId = static::$duplicatedElementIds[$parentId];
+                        }
+
+                        Craft::$app->getStructures()->append($element->structureId, $mainClone, $parentId, $mode);
+                    } else {
+                        // Just append it to the root
+                        Craft::$app->getStructures()->appendToRoot($element->structureId, $mainClone, $mode);
+                    }
+                }
             }
 
             // Map it
@@ -818,7 +862,8 @@ class Elements extends Component
                     $siteClone->uid = $mainClone->uid;
                     $siteClone->enabled = $mainClone->enabled;
                     $siteClone->contentId = null;
-                    $siteClone->dateCreated = null;
+                    $siteClone->dateCreated = $mainClone->dateCreated;
+                    $siteClone->dateUpdated = $mainClone->dateUpdated;
 
                     // Attach behaviors
                     foreach ($behaviors as $name => $behavior) {
@@ -1292,7 +1337,7 @@ class Elements extends Component
      *
      * @param ElementInterface[] $elements
      * @return bool Whether at least one element was restored successfully
-     * @throws Exception if an $element doesn’t have any supported sites
+     * @throws UnsupportedSiteException if an element is being restored for a site it doesn’t support
      * @throws \Throwable if reasons
      */
     public function restoreElements(array $elements): bool
@@ -1319,13 +1364,13 @@ class Elements extends Component
             foreach ($elements as $element) {
                 // Get the sites supported by this element
                 if (empty($supportedSites = ElementHelper::supportedSitesForElement($element))) {
-                    throw new Exception("Element {$element->id} has no supported sites.");
+                    throw new UnsupportedSiteException($element, $element->siteId, "Element {$element->id} has no supported sites.");
                 }
 
                 // Make sure the element actually supports the site it's being saved in
                 $supportedSiteIds = ArrayHelper::getColumn($supportedSites, 'siteId');
                 if (!in_array($element->siteId, $supportedSiteIds, false)) {
-                    throw new Exception('Attempting to restore an element in an unsupported site.');
+                    throw new UnsupportedSiteException($element, $element->siteId, 'Attempting to restore an element in an unsupported site.');
                 }
 
                 // Get the element in each supported site
@@ -1879,6 +1924,7 @@ class Elements extends Component
      * @param ElementInterface|false|null $siteElement The element loaded for the propagated site (only pass this if you
      * already had a reason to load it). Set to `false` if it is known to not exist yet.
      * @throws Exception if the element couldn't be propagated
+     * @throws UnsupportedSiteException if the element doesn’t support `$siteId`
      * @since 3.0.13
      */
     public function propagateElement(ElementInterface $element, int $siteId, $siteElement = null)
@@ -1892,7 +1938,7 @@ class Elements extends Component
         $supportedSites = ArrayHelper::index($supportedSites, 'siteId');
         $siteInfo = $supportedSites[(string)$siteId] ?? null;
         if ($siteInfo === null) {
-            throw new Exception('Attempting to propagate an element to an unsupported site.');
+            throw new UnsupportedSiteException($element, $siteId, 'Attempting to propagate an element to an unsupported site.');
         }
 
         $this->_propagateElement($element, $siteInfo, $siteElement);
@@ -1908,7 +1954,7 @@ class Elements extends Component
      * (this will happen via a background job if this is a web request)
      * @return bool
      * @throws ElementNotFoundException if $element has an invalid $id
-     * @throws Exception if the $element doesn’t have any supported sites
+     * @throws UnsupportedSiteException if the element is being saved for a site it doesn’t support
      * @throws \Throwable if reasons
      */
     private function _saveElementInternal(ElementInterface $element, bool $runValidation = true, bool $propagate = true, bool $updateSearchIndex = null): bool
@@ -1962,18 +2008,19 @@ class Elements extends Component
 
         // Get the sites supported by this element
         if (empty($supportedSites = ElementHelper::supportedSitesForElement($element))) {
-            throw new Exception('All elements must have at least one site associated with them.');
+            throw new UnsupportedSiteException($element, $element->siteId, 'All elements must have at least one site associated with them.');
         }
 
         // Make sure the element actually supports the site it's being saved in
         $supportedSiteIds = ArrayHelper::getColumn($supportedSites, 'siteId');
         if (!in_array($element->siteId, $supportedSiteIds, false)) {
-            throw new Exception('Attempting to save an element in an unsupported site.');
+            throw new UnsupportedSiteException($element, $element->siteId, 'Attempting to save an element in an unsupported site.');
         }
 
         // If the element only supports a single site, ensure it's enabled for that site
-        if (count($supportedSites) === 1) {
-            $element->enabledForSite = true;
+        if (count($supportedSites) === 1 && !$element->getEnabledForSite()) {
+            $element->enabled = false;
+            $element->setEnabledForSite(true);
         }
 
         // Set a dummy title if there isn't one already and the element type has titles
@@ -2129,7 +2176,7 @@ class Elements extends Component
                 $element->newSiteIds = [];
 
                 foreach ($supportedSites as $siteInfo) {
-                    // Skip the master site
+                    // Skip the initial site
                     if ($siteInfo['siteId'] != $element->siteId) {
                         $this->_propagateElement($element, $siteInfo, $isNewElement ? false : null);
                     }
@@ -2282,7 +2329,7 @@ class Elements extends Component
             $siteElement = null;
         }
 
-        // If it doesn't exist yet, just clone the master site
+        // If it doesn't exist yet, just clone the initial site
         if ($isNewSiteForElement = ($siteElement === null)) {
             $siteElement = clone $element;
             $siteElement->siteId = $siteInfo['siteId'];
@@ -2317,12 +2364,12 @@ class Elements extends Component
                 // Only copy the non-translatable field values
                 foreach ($fieldLayout->getFields() as $field) {
                     /** @var Field $field */
-                    // Has this field changed, and does it produce the same translation key as it did for the master element?
+                    // Has this field changed, and does it produce the same translation key as it did for the initial element?
                     if (
                         $element->isFieldDirty($field->handle) &&
                         $field->getTranslationKey($siteElement) === $field->getTranslationKey($element)
                     ) {
-                        // Copy the master element's value over
+                        // Copy the initial element's value over
                         $siteElement->setFieldValue($field->handle, $element->getFieldValue($field->handle));
                     }
                 }

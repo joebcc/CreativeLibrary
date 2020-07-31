@@ -188,7 +188,7 @@ class Drafts extends Component
     public function saveElementAsDraft(ElementInterface $element, int $creatorId, string $name = null, string $notes = null): bool
     {
         if ($name === null) {
-            $name = 'First draft';
+            $name = Craft::t('app', 'First draft');
         }
 
         // Create the draft row
@@ -373,6 +373,10 @@ class Drafts extends Component
                 $newSource = $elementsService->duplicateElement($draft, [
                     'id' => $source->id,
                     'uid' => $source->uid,
+                    'root' => $source->root,
+                    'lft' => $source->lft,
+                    'rgt' => $source->rgt,
+                    'level' => $source->level,
                     'dateCreated' => $source->dateCreated,
                     'draftId' => null,
                     'revisionNotes' => $draft->draftNotes ?: Craft::t('app', 'Applied “{name}”', ['name' => $draft->draftName]),

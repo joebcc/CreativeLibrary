@@ -157,6 +157,9 @@ class IndexAssetsController extends Controller
                 } catch (AssetDisallowedExtensionException $e) {
                     $this->stdout('skipped: ' . $e->getMessage() . PHP_EOL, Console::FG_YELLOW);
                     continue;
+                } catch (VolumeObjectNotFoundException $e) {
+                    $this->stdout('skipped: ' . $e->getMessage() . PHP_EOL, Console::FG_RED);
+                    continue;
                 } catch (\Throwable $e) {
                     $this->stdout('error: ' . $e->getMessage() . PHP_EOL . PHP_EOL, Console::FG_RED);
                     Craft::$app->getErrorHandler()->logException($e);
@@ -242,6 +245,8 @@ class IndexAssetsController extends Controller
 
             $this->stdout('done' . PHP_EOL, Console::FG_GREEN);
         }
+
+        $assetIndexer->deleteStaleIndexingData();
 
         return ExitCode::OK;
     }
