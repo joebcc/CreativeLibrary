@@ -45,7 +45,7 @@ module.exports = function (api) {
           return;
         //? Ensure we have only 1 .html file .........................................
         } else { 
-          creativeUrl = `/banners/${client}/${item.slug}/`;
+          creativeUrl = `/banners/${client.slug}/${item.slug}/`;
           zipEntries.forEach(function(zipEntry) {
             const entryName = zipEntry.entryName;
             if (entryName.includes('__MACOSX')) {
